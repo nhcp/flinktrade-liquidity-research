@@ -1,0 +1,9 @@
+# Runtime state — owned by the server, not versioned
+data/paper_trade_state.json
+data/paper_trade_events.csv
+
+# Log directory produced by cron
+logs/
+
+# Claude Code local settings
+.claude/

@@ -7,6 +7,32 @@ gate on 20 days of MEXC 1h data. This paper trade is the required final step.
 
 ---
 
+## Status Update — 2026-08-15: KAVA/USDT SUSPENDED
+
+**KAVA/USDT was suspended on 2026-08-15**, ahead of hitting its own
+adverse-selection stop condition, based on new evidence from the
+`liquidity_provision_v2` strengthening-research thread (see
+`liquidity_provision_v2/docs/FINAL_REPORT.md`) showing the original 6/6 gate
+pass was a false positive from having tested only 2 pairs:
+
+- **Gate fails under a perfect fill assumption:** KAVA fails its own gate in
+  the majority of seeds even at a 100% fill rate — the original pass was
+  never really about fill-rate assumptions being conservative.
+- **No signal vs. negative control:** KAVA's result vs. a shuffled/randomized-price
+  control is statistically indistinguishable from noise (60% vs. 43% pass
+  rate).
+- **Fee-fragile:** KAVA flips net-negative at just a 5bps fee change.
+
+By contrast, MINA/USDT clearly beats its shuffled-price control (97% vs.
+23% pass rate) and remains majority-passing down to ~15% fill rate — real
+signal. **MINA/USDT continues running untouched.**
+
+This paper trade is now effectively MINA-only. KAVA's row below is kept for
+the historical record; disregard the "KAVA is the stronger candidate" note
+under MINA-specific monitoring — it predates this finding and is superseded.
+
+---
+
 ## What This Is (and Is Not)
 
 **What it is:** A live replay of the backtest strategy using MEXC's public
@@ -106,8 +132,11 @@ Suspend MINA immediately:
 python src/paper_trade.py --suspend MINAUSDT
 ```
 
-KAVA's bid-fill AS was +0.010% — well clear of the threshold. KAVA is the
-stronger candidate; MINA needs the paper trade to resolve the ambiguity.
+~~KAVA's bid-fill AS was +0.010% — well clear of the threshold. KAVA is the
+stronger candidate; MINA needs the paper trade to resolve the ambiguity.~~
+**Superseded 2026-08-15:** see "Status Update" above — KAVA's 6/6 gate pass
+was a false positive (no signal vs. negative control, fee-fragile, fails
+even at 100% fill). KAVA is suspended; MINA is the pair with real signal.
 
 ---
 
@@ -153,7 +182,12 @@ corrupted, it can be reconstructed by replaying the events.
 
 ### Week 1 — 2026-08-14 to 2026-08-21
 
-*TBD — run `python src/paper_report.py` and paste summary here*
+**2026-08-15:** KAVA/USDT suspended (`python3 src/paper_trade.py --suspend
+KAVAUSDT`) on evidence from `liquidity_provision_v2/docs/FINAL_REPORT.md`
+that its gate pass was a false positive — see "Status Update" at top of this
+doc. MINA/USDT continues unaffected.
+
+*Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
 
 ### Week 2 — 2026-08-21 to 2026-08-28
 

@@ -1,5 +1,5 @@
 """
-MEXC paper trade runner — MINA/USDT and KAVA/USDT.
+MEXC paper trade runner — MINA/USDT, KAVA/USDT, and SFP/USDT.
 
 Run once per hour (cron or manual). On first run, initialises state but
 places no trades. On subsequent runs, processes all completed 1h kline bars
@@ -38,7 +38,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-PAIRS = ["MINAUSDT", "KAVAUSDT"]
+PAIRS = ["MINAUSDT", "KAVAUSDT", "SFPUSDT"]
 BASE_URL = "https://api.mexc.com/api/v3/klines"
 DATA_DIR = Path(__file__).parent.parent / "data"
 STATE_FILE = DATA_DIR / "paper_trade_state.json"
@@ -73,6 +73,7 @@ def ms_to_utc(ms: int) -> str:
 
 def _blank_pair_state() -> dict:
     return {
+        "start_date_utc": None,   # set on this pair's own first run (independent 30-day clock)
         "last_processed_bar_open_ms": None,
         "last_processed_bar_close": None,
         "suspended": False,
@@ -107,7 +108,18 @@ def _blank_state() -> dict:
 def load_state() -> dict:
     if STATE_FILE.exists():
         with open(STATE_FILE) as f:
-            return json.load(f)
+            state = json.load(f)
+        # Migrate: add blank state for any pair newly added to PAIRS, and
+        # backfill start_date_utc for pairs saved before it was tracked
+        # per-pair (they inherit the old global meta start, preserving
+        # their original decision date).
+        pairs = state.setdefault("pairs", {})
+        for pair in PAIRS:
+            if pair not in pairs:
+                pairs[pair] = _blank_pair_state()
+            elif "start_date_utc" not in pairs[pair]:
+                pairs[pair]["start_date_utc"] = state.get("meta", {}).get("start_date_utc")
+        return state
     return _blank_state()
 
 
@@ -350,6 +362,7 @@ def cmd_status(state: dict) -> None:
         t = ps["totals"]
         suspended = " [SUSPENDED]" if ps["suspended"] else ""
         print(f"\n  {pair}{suspended}")
+        print(f"    Start (own clock):   {ps.get('start_date_utc') or 'not yet initialised'}")
         print(f"    Last bar processed: {ms_to_utc(ps['last_processed_bar_open_ms']) if ps['last_processed_bar_open_ms'] else '—'}")
         print(f"    Pending bid:  {ps['pending_bid'] or 'none'}")
         print(f"    Pending ask:  {ps['pending_ask'] or 'none'}")
@@ -377,12 +390,15 @@ def cmd_resume(state: dict, pair: str, dry_run: bool = False) -> None:
 
 def cmd_run(state: dict, dry_run: bool = False) -> None:
     run_utc = now_utc()
-    is_first_run = state["meta"]["start_date_utc"] is None
     all_events: list[dict] = []
     pair_summaries: list[str] = []
 
     for pair in PAIRS:
         ps = state["pairs"][pair]
+        # Each pair tracks its own seed/init independently, so a pair added
+        # later (e.g. SFPUSDT joining an already-running MINA/KAVA state)
+        # gets its own 30-day clock instead of inheriting the others' start.
+        pair_is_first_run = ps["last_processed_bar_open_ms"] is None
 
         if ps["suspended"]:
             print(f"\n[{pair}] SUSPENDED — skipping")
@@ -414,9 +430,10 @@ def cmd_run(state: dict, dry_run: bool = False) -> None:
             else:
                 bar["prev_close"] = completed[i - 1]["close"]
 
-        # ── Initialisation (first run) ──────────────────────────────────────
-        if is_first_run:
+        # ── Initialisation (this pair's first run) ──────────────────────────
+        if pair_is_first_run:
             seed_bar = completed[-1]
+            ps["start_date_utc"] = run_utc
             ps["last_processed_bar_open_ms"] = seed_bar["open_time_ms"]
             ps["last_processed_bar_close"] = seed_bar["close"]
             print(f"  INIT seed bar: {ms_to_utc(seed_bar['open_time_ms'])}  "
@@ -487,8 +504,8 @@ def cmd_run(state: dict, dry_run: bool = False) -> None:
         time.sleep(0.3)
 
     # ── Finalise ─────────────────────────────────────────────────────────────
-    if is_first_run:
-        state["meta"]["start_date_utc"] = run_utc
+    if state["meta"]["start_date_utc"] is None:
+        state["meta"]["start_date_utc"] = run_utc  # earliest-ever run, for file-level display only
 
     state["meta"]["last_run_utc"] = run_utc
     append_events(all_events, dry_run=dry_run)
@@ -499,7 +516,7 @@ def cmd_run(state: dict, dry_run: bool = False) -> None:
     print(f"Run complete{tag}: {run_utc}")
     for s in pair_summaries:
         print(f"  {s}")
-    if not is_first_run:
+    if any("initialised" not in s and "SUSPENDED" not in s for s in pair_summaries):
         print(f"\nRun: python src/paper_report.py  — for full P&L and AS report")
 
 

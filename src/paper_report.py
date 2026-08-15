@@ -25,7 +25,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-PAIRS = ["MINAUSDT", "KAVAUSDT"]
+PAIRS = ["MINAUSDT", "KAVAUSDT", "SFPUSDT"]
 DATA_DIR = Path(__file__).parent.parent / "data"
 STATE_FILE = DATA_DIR / "paper_trade_state.json"
 EVENTS_FILE = DATA_DIR / "paper_trade_events.csv"
@@ -140,6 +140,14 @@ def _elapsed_days(start_utc: str | None) -> float:
     return (datetime.now(timezone.utc) - start).total_seconds() / 86400
 
 
+def _decision_date(start_utc: str | None, window_days: int = 30) -> str | None:
+    if not start_utc:
+        return None
+    start = datetime.fromisoformat(start_utc.replace("Z", "+00:00"))
+    from datetime import timedelta
+    return (start + timedelta(days=window_days)).date().isoformat()
+
+
 def report_pair(pair: str, state: dict, events: list[dict],
                 kline_idx: dict[int, float], current_price: float | None) -> None:
     ps = state["pairs"].get(pair, {})
@@ -159,6 +167,15 @@ def report_pair(pair: str, state: dict, events: list[dict],
     if ps.get("suspended"):
         print(f"  STATUS: *** SUSPENDED ***")
     print(f"{'='*65}")
+
+    start = ps.get("start_date_utc")
+    elapsed = _elapsed_days(start)
+    remaining = max(0, 30 - elapsed)
+    decision = _decision_date(start)
+    print(f"\n  Own clock:  started {start or 'not yet initialised'}")
+    if start:
+        print(f"              {elapsed:.1f} / 30 days elapsed  (remaining: {remaining:.1f} days)  "
+              f"— decision date: {decision}")
 
     # ── Fill summary ──────────────────────────────────────────────────────────
     print(f"\n  Fills:")
@@ -281,13 +298,11 @@ def main() -> None:
     pairs = [args.pair.upper()] if args.pair else PAIRS
     all_events = load_events()
 
-    elapsed = _elapsed_days(state["meta"].get("start_date_utc"))
-    remaining = max(0, 30 - elapsed)
-
     print(f"\nPaper Trade Report  —  {now_utc()}")
-    print(f"Started:  {state['meta'].get('start_date_utc') or 'not yet initialised'}")
-    print(f"Elapsed:  {elapsed:.1f} / 30 days  (remaining: {remaining:.1f} days)")
-    print(f"Last run: {state['meta'].get('last_run_utc') or '—'}")
+    print(f"File first initialised: {state['meta'].get('start_date_utc') or 'not yet initialised'}")
+    print(f"Last run:               {state['meta'].get('last_run_utc') or '—'}")
+    print(f"(Each pair below tracks its own independent 30-day clock/decision date —")
+    print(f" a pair added later than the others starts its own window from its own first run.)")
 
     # Fetch klines for forward-price lookup
     kline_indexes: dict[str, dict[int, float]] = {}
@@ -312,10 +327,12 @@ def main() -> None:
                     current_prices.get(pair))
 
     print(f"\n{'─'*65}")
-    print("Decision rule after 30 days:")
-    print("  BOTH pairs must maintain G4+G5 PASS, OR suspend and close thread.")
-    print("  MINA bid-fill AS at t+1h < -0.50% → suspend MINAUSDT immediately:")
+    print("Decision rule after each pair's own 30 days:")
+    print("  Each pair must independently maintain G4+G5 PASS through its own")
+    print("  window, OR be suspended. Any pair's bid-fill AS at t+1h < -0.50% →")
+    print("  suspend that pair immediately, e.g.:")
     print("    python src/paper_trade.py --suspend MINAUSDT")
+    print("    python src/paper_trade.py --suspend SFPUSDT")
     print()
 
 

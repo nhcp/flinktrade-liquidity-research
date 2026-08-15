@@ -186,3 +186,48 @@ MINA passes but requires monitoring of bid-fill adverse selection during paper t
 1. 30-day paper trade on MEXC (track actual fills, not simulated OHLCV crossings)
 2. Monitor MINA bid-fill AS in real paper-trade conditions — suspend if it worsens
 3. Confirm MEXC 0% maker fee applies to our order type and account tier
+
+---
+
+## Results — SFP/USDT Added — Simulation Date 2026-08-15
+
+**Source of candidate:** independent `liquidity_provision_v2`-style deeper validation
+thread (handoff document, not authored in this repo) recommended SFP/USDT as a third
+candidate, having reproduced MINA's pattern (real signal, beats negative controls,
+robust down to 10% fill rate, fee-tolerant to ~8.5bps) under the same battery that
+separated MINA from KAVA. That handoff used each pair's own live top-of-book spread
+(SFP: 17.12bps) rather than this repo's flat 1.0% quoting convention, and its own
+G1–G6 reconstruction, not the criteria below — so its specific numbers do not
+directly certify a pass against this gate. See PAPER_TRADE.md "Status Update —
+2026-08-15: SFPUSDT added" for the full reconciliation note.
+
+**This gate was re-run directly against SFP/USDT using this repo's actual
+methodology** (same `simulator.py`/`analytics.py`, flat 1.0% spread, fresh MEXC
+1h klines, 2026-07-25 to 2026-08-15, 20.8 days) — the same process originally used
+to screen MINA and KAVA — to get an apples-to-apples registered result:
+
+| Criterion | Threshold | SFP/USDT |
+|---|---|---|
+| G1: Total fills | ≥ 5 | 267 ✓ |
+| G2: Net/complete RT | > 0.10% | +1.0000% ✓ |
+| G3: Fill-adj monthly | > 0 | +59.32% ✓ |
+| G4: AS at t+1h | > -0.15% | +0.0018% PASS ✓ |
+| G5: AS at t+4h | > -0.30% | +0.0676% PASS ✓ |
+| G6: Sharpe | ≥ 0.3 | 10.211 ✓ |
+| DQ: Forced-close rate | ≤ 95% | 17.3% ✓ |
+| **OVERALL** | **All 6** | **6/6 PASS** |
+
+Bid-fill AS@1h = -0.0134% (n=132), ask-fill AS@1h = +0.0168% (n=134) — both near
+zero, no directional asymmetry like MINA's bid-side flag. SFP is not currently in
+a strong trend over this window (unlike MINA's -21% window).
+
+**Caveat (carried over from KAVA's lesson):** a clean 6/6 on a single ~20-day
+window is a screen, not proof — KAVA also passed 6/6 here before deeper scrutiny
+in a separate sandbox revealed it was noise. SFP's case is stronger than KAVA's
+was at this stage, because the deeper battery (fill-rate sensitivity, negative
+controls, fee sensitivity) has *already* been run and SFP passed it — just under
+a different spread parameterization than this table. The 30-day live paper trade
+is what validates the flat-1.0% version of the strategy specifically.
+
+**Verdict: PROCEED to paper trade.** See PAPER_TRADE.md for SFP's paper-trade
+setup and independent 30-day decision clock (2026-08-15 → 2026-09-14).

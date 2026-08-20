@@ -250,21 +250,22 @@ def report_pair(pair: str, state: dict, events: list[dict],
                 continue
             mu = _mean(vals)
             sd = _std(vals)
+            mu_pct = mu * 100 if mu is not None else None
             gate_note = ""
-            if h == 1 and mu is not None:
+            if h == 1 and mu_pct is not None:
                 thresh = -0.15 * SPREAD_PCT
                 dq     = -0.50 * SPREAD_PCT
-                if mu < dq:
+                if mu_pct < dq:
                     gate_note = f" *** DQ-FAIL: informed flow (thresh={dq:.3f}%)"
-                elif mu < thresh:
+                elif mu_pct < thresh:
                     gate_note = f" FAIL G4 (thresh={thresh:.3f}%)"
                 else:
                     gate_note = " PASS G4"
-            elif h == 4 and mu is not None:
+            elif h == 4 and mu_pct is not None:
                 thresh = -0.30 * SPREAD_PCT
-                gate_note = (" FAIL G5" if mu < thresh else " PASS G5") + f" (thresh={thresh:.3f}%)"
-            sd_str = f"{sd:.4f}" if sd is not None else "—"
-            print(f"    t+{h}h     {len(vals):>4}  {_pct(mu*100 if mu is not None else None, 4):>9}  "
+                gate_note = (" FAIL G5" if mu_pct < thresh else " PASS G5") + f" (thresh={thresh:.3f}%)"
+            sd_str = f"{sd*100:.4f}" if sd is not None else "—"
+            print(f"    t+{h}h     {len(vals):>4}  {_pct(mu_pct, 4):>9}  "
                   f"{sd_str:>8}{gate_note}")
 
         # Bid-fill breakdown at t+1h — the MINA risk flag

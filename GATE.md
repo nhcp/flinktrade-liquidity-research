@@ -284,3 +284,78 @@ paper trade is what validates the flat-1.0% version of the strategy specifically
 
 **Verdict: PROCEED to paper trade.** See PAPER_TRADE.md for XYO's paper-trade
 setup and independent 30-day decision clock (2026-08-20 → 2026-09-19).
+
+---
+
+## Results — ETHW/USDT Evaluated (NOT added) — Simulation Date 2026-08-20
+
+**Source of candidate:** independent `liquidity_provision_v2` deep-validation
+thread (KILL_LOG.md handoff on Kelenva, not authored in this repo) cleared
+ETHW/USDT as a fifth candidate under the same fill-rate-sensitivity /
+negative-control / fee-sensitivity battery used for MINA, SFP, and XYO, at
+fill-rate fr=0.50:
+
+- Beats both negative controls: 87% pass vs random-entry's 80%, vs
+  shuffled-price's 47% (a 40-point margin over the shuffle control)
+- Clean fill-rate sweep — never below 70% majority-pass across the realistic
+  fill-rate range
+- Fee-robust through 5bps
+- No full-information adverse-selection failure
+- Strong toxic-flow recovery
+
+**This gate was re-run directly against ETHW/USDT using this repo's actual
+methodology** (same `simulator.py`/`analytics.py`, flat 1.0% spread, fresh MEXC
+1h klines, 2026-07-31 to 2026-08-20, 20.8 days) — the same reconciliation
+process used to screen SFP and XYO. Unlike SFP and XYO, this one **did not**
+reconcile to a clean pass:
+
+| Criterion | Threshold | ETHW/USDT |
+|---|---|---|
+| G1: Total fills | ≥ 5 | 215 ✓ |
+| G2: Net/complete RT | > 0.10% | +1.0000% ✓ |
+| G3: Fill-adj monthly | > 0 | **-14.0339% FAIL** ✗ |
+| G4: AS at t+1h | > -0.15% | -0.0519% PASS ✓ |
+| G5: AS at t+4h | > -0.30% | -0.0364% PASS ✓ |
+| G6: Sharpe | ≥ 0.3 | 2.382 ✓ |
+| DQ: Forced-close rate | ≤ 95% | 30.8% ✓ |
+| **OVERALL** | **All 6** | **5/6 — FAIL (G3)** |
+
+Bid-fill AS@1h = +0.0327% (n=110), ask-fill AS@1h = -0.1414% (n=104) — both
+within gate bounds, no AS disqualification.
+
+**Root cause of the G3 fail — forced-close severity, not fill-rate sensitivity
+or spread choice.** Compared directly against every other pair in the live
+pool at the same 1.0% spread and same run:
+
+| Pair | Forced-close rate | Mean net/forced close |
+|---|---|---|
+| MINA | 29.5% | -0.28% |
+| KAVA | 41.0% | -0.21% |
+| SFP | 17.3% | -0.30% |
+| XYO | 14.7% | -0.21% |
+| ETHW | 30.8% | **-0.71%** |
+
+ETHW's forced-close *rate* is unremarkable (in line with MINA/KAVA), but its
+mean *loss per forced close* is 2.3–3.4x worse than every other pair — this is
+what drags fill-adj monthly net decisively negative (95.2 forced closes/month ×
+-0.708% outweighs the 50%-haircut gain from complete RTs). A spread sweep
+confirms this isn't a cherry-pick artifact: G3 only passes at a non-primary
+0.8% spread (+13.03%/mo) and fails again at 1.5% (-1.15%/mo); it fails at the
+pre-registered primary 1.0%. This is consistent with ETHW (EthereumPoW) being
+materially more volatile intrabar than the other four pairs (mean H-L range
+0.875% over the window) — the fixed 3-hour forced-close window catches bigger
+adverse price swings than this strategy's hold-time assumption tolerates.
+
+**Same lesson as KAVA:** a deep-validation battery pass under a different
+engine/spread parameterization does not certify a pass against this repo's
+own registered gate at its actual live-paper-trade convention (flat 1.0%
+spread, $50 notional). SFP and XYO's handoffs both reconciled cleanly; this
+one does not, and the divergence is well-characterized (forced-close severity)
+rather than ambiguous.
+
+**Verdict: DO NOT PROCEED to paper trade.** ETHW/USDT is not added to the live
+paper-trade pool. Data (`data/ETHWUSDT_1h.csv`, `data/ETHWUSDT_fills.csv`) and
+this analysis are kept in the repo for the record; `PAIRS` in
+`paper_trade.py`/`paper_report.py`/`simulator.py`/`analytics.py`/`data_fetch.py`
+is unchanged (MINA/KAVA/SFP/XYO only). See PAPER_TRADE.md "Status Update —
+2026-08-20: ETHWUSDT evaluated, not added" for the pool-level note.

@@ -112,6 +112,48 @@ live totals (verified via `--dry-run` and `--status` before and after).
 
 ---
 
+## Status Update — 2026-08-20: ETHWUSDT evaluated, NOT added
+
+**ETHW/USDT was evaluated as a fifth candidate on 2026-08-20**, on the same
+recommendation basis as SFP and XYO — an independent `liquidity_provision_v2`
+deep-validation thread (KILL_LOG.md handoff on Kelenva, not authored in this
+repo) reporting it beats both negative controls at fr=0.50 (87% real vs 80%
+random-entry vs 47% shuffled-price, a 40-point margin), a clean fill-rate
+sweep (never below 70% majority-pass across the realistic range), fee
+robustness through 5bps, no full-information adverse-selection failure, and
+strong toxic-flow recovery.
+
+**Applying the same reconciliation discipline used for SFP and XYO** (re-run
+this repo's actual `data_fetch.py` → `simulator.py` → `analytics.py` pipeline
+against fresh real ETHWUSDT MEXC data at the flat 1.0% spread and $50 notional,
+rather than trusting the handoff's numbers — which were computed on a
+different engine/spread — at face value), the result did **not** reconcile
+cleanly: **5/6 gate pass, G3 (fill-adj monthly net) FAILS at -14.03%/month**,
+driven by forced-close losses averaging -0.71% per forced close — 2.3–3.4x
+worse than every other pair currently in the pool (MINA -0.28%, KAVA -0.21%,
+SFP -0.30%, XYO -0.21%). A spread sweep confirmed this isn't a 1.0%-specific
+artifact to dismiss: G3 only clears at a non-primary 0.8% spread and fails
+again at 1.5%. Full detail, including the root-cause forced-close comparison,
+in GATE.md "Results — ETHW/USDT Evaluated (NOT added)".
+
+**This is the same failure mode that suspended KAVA**: a deep-validation
+battery pass under a different engine/spread parameterization does not
+transfer to this repo's own registered gate at its actual live-paper-trade
+convention. Unlike SFP and XYO, whose reconciliation runs confirmed the
+handoff's qualitative finding, ETHW's reconciliation contradicts it — this
+repo's own methodology finds real, well-characterized negative EV from
+forced closes, plausibly explained by ETHW (EthereumPoW) being materially
+more volatile intrabar than the other four pairs.
+
+**Decision: ETHW/USDT is NOT added to this paper trade.** No change to
+`PAIRS` in any script, no new entry in `paper_trade_state.json`, and MINA's
+(2026-09-13), SFP's (2026-09-14), and XYO's (2026-09-19) clocks and live
+totals are untouched. `data/ETHWUSDT_1h.csv` and `data/ETHWUSDT_fills.csv`
+are kept in the repo for reproducibility of this analysis, not as live
+paper-trade inputs.
+
+---
+
 ## What This Is (and Is Not)
 
 **What it is:** A live replay of the backtest strategy using MEXC's public

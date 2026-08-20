@@ -371,6 +371,28 @@ trade on its own independent clock — see "Results — SFP" below.
 trading bar 2026-08-15T15:00:00Z). Registered gate re-run at this repo's flat
 1.0% spread: 6/6 pass, 267 fills, near-zero bid/ask AS — see GATE.md.
 
+**2026-08-20 (5.2 days in):** `src/paper_report.py` had a scaling bug in its
+per-horizon AS gate labels — it compared the raw fraction AS mean against
+percent-scale thresholds (a 100x mismatch), so the printed "PASS G4"/"PASS G5"
+labels were almost always PASS regardless of the real value. Fixed (commit
+617f203); the bid-fill-only auto-suspend check was already scaled correctly
+and unaffected.
+
+With the fix applied, **SFP is currently failing G4**: AS at t+1h = -0.2755%,
+below the -0.15% maintenance threshold (was masked as a false PASS before the
+fix). G5 still passes (-0.2556% vs -0.30%), and the bid-fill-only auto-suspend
+check is nowhere close (-0.0611% vs -0.50% stop) — no auto-suspend triggers
+from this.
+
+**Same weekly check also shows mean net/forced close = -0.9894%**, past the
+-0.30% stop-level guardrail in the Weekly Checks table above (19 forced
+closes so far). This is the same underlying pattern as the G4 fail, not a
+separate issue: SFP's forced closes are losing more, on average, than
+completed round-trips earn (+1.0000% net each), so both should be reviewed
+together over the next few weekly checks rather than treating G4 as an
+isolated flag. Neither is an auto-suspend trigger on its own — SFP continues
+running — but both warrant closer attention heading into Week 2.
+
 *Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
 
 ### Week 2 — 2026-08-22 to 2026-08-29

@@ -1,5 +1,5 @@
 """
-MEXC paper trade runner — MINA/USDT, KAVA/USDT, and SFP/USDT.
+MEXC paper trade runner — MINA/USDT, KAVA/USDT, SFP/USDT, and XYO/USDT.
 
 Run once per hour (cron or manual). On first run, initialises state but
 places no trades. On subsequent runs, processes all completed 1h kline bars
@@ -38,7 +38,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-PAIRS = ["MINAUSDT", "KAVAUSDT", "SFPUSDT"]
+PAIRS = ["MINAUSDT", "KAVAUSDT", "SFPUSDT", "XYOUSDT"]
 BASE_URL = "https://api.mexc.com/api/v3/klines"
 DATA_DIR = Path(__file__).parent.parent / "data"
 STATE_FILE = DATA_DIR / "paper_trade_state.json"

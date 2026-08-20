@@ -1,6 +1,7 @@
 # Crypto MM MEXC — 30-Day Paper Trade
 ## MINA/KAVA started: 2026-08-14 | Target end: 2026-09-13
 ## SFP started: 2026-08-15 | Target end: 2026-09-14 (independent clock — see Status Update below)
+## XYO started: 2026-08-20 | Target end: 2026-09-19 (independent clock — see Status Update below)
 
 **Purpose:** Validate MINA/USDT and KAVA/USDT backtest results against real
 MEXC kline data before any capital allocation. Both pairs passed the 6/6
@@ -78,6 +79,39 @@ and `paper_report.py` now track `start_date_utc` per pair for this reason.
 
 ---
 
+## Status Update — 2026-08-20: XYOUSDT added
+
+**XYO/USDT joined this paper trade on 2026-08-20**, on the recommendation of an
+independent `liquidity_provision_v2` deep-validation thread (KILL_LOG.md handoff,
+not authored in this repo) that ran the same fill-rate-sensitivity /
+negative-control / fee-sensitivity battery used for MINA and SFP. At fr=0.50, XYO
+beats both negative controls decisively (93% pass vs random-entry's 83%, vs
+shuffled-price's 47% — a 46-point margin), is clean 100% pass at fr=1.00 and
+majority-passing across the full fill-rate sweep (74–100%), is fee-robust (flat
+67% pass rate at fr=0.25 across every fee level 0–5bps), and shows the best
+toxic-flow recovery of any pair validated in that study so far (3/4/6 round trips
+to recover from 2/3/5-sigma shocks).
+
+**Reconciliation check (same discipline applied to SFP):** re-ran this repo's
+actual `data_fetch.py` → `simulator.py` → `analytics.py` pipeline against fresh
+real XYOUSDT MEXC data at the same flat 1.0% spread used for MINA/SFP (the
+literal existing infra, unchanged) rather than trusting the handoff's numbers at
+face value. Result: **6/6 gate pass**, 312 fills over 20.8 days, both bid and ask
+AS positive at t+1h (bid +0.181%, ask +0.032%) — the cleanest AS profile of the
+three active pairs, no directional flag at all. See GATE.md "Results — XYO/USDT
+Added" for the full table. XYO is paper-traded below at the same flat 1.0%
+spread and $50/fill notional as MINA and SFP — the repo shows no evidence of
+per-pair tuning of either parameter (both are single global constants in
+`paper_trade.py`/`paper_report.py`), so no reconciliation flag applies here.
+
+**XYO runs on its own independent 30-day clock**, started 2026-08-20 (its own
+first paper-trade run, seed bar 2026-08-20T19:00:00Z), decision date
+**2026-09-19** — tracked separately from MINA's 2026-09-13 and SFP's 2026-09-14
+decision dates. Adding XYO did not touch MINA's or SFP's `start_date_utc` or
+live totals (verified via `--dry-run` and `--status` before and after).
+
+---
+
 ## What This Is (and Is Not)
 
 **What it is:** A live replay of the backtest strategy using MEXC's public
@@ -99,7 +133,7 @@ reasonable for this market structure over an extended window.
 
 | Parameter         | Value    |
 |---|---|
-| Pairs             | MINA/USDT, KAVA/USDT, SFP/USDT |
+| Pairs             | MINA/USDT, KAVA/USDT, SFP/USDT, XYO/USDT |
 | Spread            | 1.0% (0.5% each side from mid) — same flat convention for all pairs |
 | Mid reference     | Previous 1h bar's close |
 | Max hold          | 3 bars (3 hours) before forced close |
@@ -164,7 +198,8 @@ Run `python src/paper_report.py` and verify, for each active pair:
 
 Log findings in the Results section below. Each pair is checked against its own
 clock (MINA/KAVA weekly boundaries land on 2026-08-21/28, 2026-09-04; SFP's land
-one day later: 2026-08-22/29, 2026-09-05).
+one day later: 2026-08-22/29, 2026-09-05; XYO's land 2026-08-27, 2026-09-03,
+2026-09-10).
 
 ### MINA-specific monitoring
 
@@ -203,6 +238,24 @@ does not depend on the live spread.
 python src/paper_trade.py --suspend SFPUSDT
 ```
 
+### XYO-specific monitoring
+
+XYO's registered gate run (2026-08-20, see GATE.md) showed the cleanest AS
+profile of any active pair — both bid and ask AS positive at t+1h (bid +0.181%,
+ask +0.032%), no directional-exposure flag at all. Its deep-validation handoff
+(separate `liquidity_provision_v2` thread, see Status Update above) found the
+best toxic-flow recovery of any pair validated in that study (3/4/6 round trips
+to recover from 2/3/5-sigma shocks), decisive separation from both negative
+controls at fr=0.50 (46-point margin over the shuffled-price control), and
+fee-robustness holding flat at fr=0.25 across the full 0–5bps fee range.
+
+**Stop condition:** same as MINA/SFP — if XYO bid-fill AS at t+1h drops below
+-0.50%, suspend immediately:
+
+```bash
+python src/paper_trade.py --suspend XYOUSDT
+```
+
 ---
 
 ## Files
@@ -222,8 +275,8 @@ corrupted, it can be reconstructed by replaying the events.
 ## Decision Framework
 
 Each pair is decided independently on its own clock — SFP joined a day after
-MINA/KAVA and is evaluated on its own 30-day window, not forced to align with
-theirs.
+MINA/KAVA and XYO joined 5 days after that; each is evaluated on its own 30-day
+window, not forced to align with the others.
 
 ### MINA/KAVA decision — 2026-09-13 (30 days from 2026-08-14)
 
@@ -255,10 +308,25 @@ analog to KAVA's "loses to random entry" flag — its deeper validation cleared
 that check — so no early-suspicion trigger beyond the standard AS/forced-close
 stop conditions applies here yet.)
 
+### XYO decision — 2026-09-19 (30 days from 2026-08-20, its own clock)
+
+**Proceed to capital ($200 XYO, $50/fill) if:**
+- [ ] XYO: AS at t+1h > -0.15% × spread  (G4 maintained)
+- [ ] XYO: AS at t+4h > -0.30% × spread  (G5 maintained)
+- [ ] XYO: bid-fill AS at t+1h did NOT drop below -0.50% at any point
+- [ ] XYO: forced-close rate < 95%
+- [ ] Total realized P&L across 30 days: positive (any positive)
+
+**Kill if:** XYO bid-fill AS at t+1h < -0.50% at any weekly check, or
+forced-close rate > 95% for 2 consecutive weeks. (Like SFP, XYO has no
+negative-control analog to KAVA's "loses to random entry" flag — its deeper
+validation cleared that check decisively — so no early-suspicion trigger beyond
+the standard AS/forced-close stop conditions applies here yet.)
+
 ### Combined capital cap
 
-If both MINA and SFP pass their respective decisions: $200/pair, $50/fill,
-$400 total (KAVA excluded, already suspended). Any single pair passing alone
+If MINA, SFP, and XYO all pass their respective decisions: $200/pair, $50/fill,
+$600 total (KAVA excluded, already suspended). Any single pair passing alone
 still counts as meaningful validation of the underlying hypothesis on its own.
 
 ---
@@ -320,5 +388,37 @@ trading bar 2026-08-15T15:00:00Z). Registered gate re-run at this repo's flat
 ---
 
 ## Final Verdict — SFP (2026-09-14)
+
+*TBD*
+
+---
+
+## Results — XYO (weekly append, independent clock)
+
+### Week 1 — 2026-08-20 to 2026-08-27
+
+**2026-08-20:** XYOUSDT initialised (seed bar 2026-08-20T19:00:00Z, first
+trading bar 2026-08-20T20:00:00Z). Registered gate re-run at this repo's flat
+1.0% spread: 6/6 pass, 312 fills, positive bid/ask AS at t+1h — see GATE.md.
+Verified via `--dry-run`/`--status` before and after that MINA's and SFP's
+`start_date_utc` and live totals were untouched by the addition.
+
+*Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
+
+### Week 2 — 2026-08-27 to 2026-09-03
+
+*TBD*
+
+### Week 3 — 2026-09-03 to 2026-09-10
+
+*TBD*
+
+### Week 4 — 2026-09-10 to 2026-09-19
+
+*TBD*
+
+---
+
+## Final Verdict — XYO (2026-09-19)
 
 *TBD*

@@ -231,3 +231,56 @@ is what validates the flat-1.0% version of the strategy specifically.
 
 **Verdict: PROCEED to paper trade.** See PAPER_TRADE.md for SFP's paper-trade
 setup and independent 30-day decision clock (2026-08-15 → 2026-09-14).
+
+---
+
+## Results — XYO/USDT Added — Simulation Date 2026-08-20
+
+**Source of candidate:** independent `liquidity_provision_v2` deep-validation thread
+(KILL_LOG.md handoff, not authored in this repo) cleared XYO/USDT as a fourth
+candidate under the same fill-rate-sensitivity / negative-control / fee-sensitivity
+battery used for MINA and SFP, at fill-rate fr=0.50:
+
+- Beats both negative controls decisively: 93% pass vs random-entry's 83%, vs
+  shuffled-price's 47% (a 46-point margin over the shuffle control)
+- Clean 100% pass at fr=1.00; majority-passing across the full fill-rate sweep
+  (74–100%)
+- Fee-robust: flat 67% pass rate at fr=0.25 across every fee level 0–5bps
+- Best toxic-flow recovery of any pair validated in that study to date
+  (3/4/6 round trips to recover from 2/3/5-sigma shocks)
+
+Unlike SFP's handoff, this one did not surface a spread-convention conflict — but
+per this repo's standing practice (see SFP note above), the deeper-validation
+numbers are relayed evidence from a different engine and are not treated as a
+gate pass on their own.
+
+**This gate was re-run directly against XYO/USDT using this repo's actual
+methodology** (same `simulator.py`/`analytics.py`, flat 1.0% spread, fresh MEXC
+1h klines, 2026-07-31 to 2026-08-20, 20.8 days) — the same process used to screen
+MINA, KAVA, and SFP — to get an apples-to-apples registered result:
+
+| Criterion | Threshold | XYO/USDT |
+|---|---|---|
+| G1: Total fills | ≥ 5 | 312 ✓ |
+| G2: Net/complete RT | > 0.10% | +1.0000% ✓ |
+| G3: Fill-adj monthly | > 0 | +82.03% ✓ |
+| G4: AS at t+1h | > -0.15% | +0.1083% PASS ✓ |
+| G5: AS at t+4h | > -0.30% | +0.1064% PASS ✓ |
+| G6: Sharpe | ≥ 0.3 | 16.222 ✓ |
+| DQ: Forced-close rate | ≤ 95% | 14.7% ✓ |
+| **OVERALL** | **All 6** | **6/6 PASS** |
+
+Bid-fill AS@1h = +0.1811% (n=159), ask-fill AS@1h = +0.0317% (n=151) — both
+positive, no directional-exposure flag like MINA's bid-side flag or a mixed
+result like SFP's. This is the cleanest registered AS profile of the three
+active pairs.
+
+**Caveat (carried over from KAVA's lesson):** a clean 6/6 on a single ~20-day
+window is a screen, not proof. XYO's case is stronger than KAVA's was at this
+stage because the deeper battery (fill-rate sensitivity, negative controls, fee
+sensitivity) has *already* been run and XYO passed it decisively — same
+qualitative pattern as MINA and SFP, not KAVA's false positive. The 30-day live
+paper trade is what validates the flat-1.0% version of the strategy specifically.
+
+**Verdict: PROCEED to paper trade.** See PAPER_TRADE.md for XYO's paper-trade
+setup and independent 30-day decision clock (2026-08-20 → 2026-09-19).

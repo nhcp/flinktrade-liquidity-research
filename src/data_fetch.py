@@ -24,7 +24,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-PAIRS = ["MINAUSDT", "KAVAUSDT", "SFPUSDT"]
+PAIRS = ["MINAUSDT", "KAVAUSDT", "SFPUSDT", "XYOUSDT"]
 BASE_URL = "https://api.mexc.com/api/v3/klines"
 DATA_DIR = Path(__file__).parent.parent / "data"
 RATE_LIMIT_SLEEP = 0.5  # MEXC public rate limit: generous, 0.5s is safe

@@ -26,7 +26,7 @@ import math
 from pathlib import Path
 
 DATA_DIR = Path(__file__).parent.parent / "data"
-PAIRS = ["MINAUSDT", "KAVAUSDT", "SFPUSDT"]
+PAIRS = ["MINAUSDT", "KAVAUSDT", "SFPUSDT", "XYOUSDT"]
 
 
 def load_fills(pair: str) -> list[dict]:

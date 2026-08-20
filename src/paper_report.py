@@ -25,7 +25,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-PAIRS = ["MINAUSDT", "KAVAUSDT", "SFPUSDT"]
+PAIRS = ["MINAUSDT", "KAVAUSDT", "SFPUSDT", "XYOUSDT"]
 DATA_DIR = Path(__file__).parent.parent / "data"
 STATE_FILE = DATA_DIR / "paper_trade_state.json"
 EVENTS_FILE = DATA_DIR / "paper_trade_events.csv"
@@ -333,6 +333,7 @@ def main() -> None:
     print("  suspend that pair immediately, e.g.:")
     print("    python src/paper_trade.py --suspend MINAUSDT")
     print("    python src/paper_trade.py --suspend SFPUSDT")
+    print("    python src/paper_trade.py --suspend XYOUSDT")
     print()
 
 

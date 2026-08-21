@@ -2,6 +2,7 @@
 ## MINA/KAVA started: 2026-08-14 | Target end: 2026-09-13
 ## SFP started: 2026-08-15 | Target end: 2026-09-14 (independent clock — see Status Update below)
 ## XYO started: 2026-08-20 | Target end: 2026-09-19 (independent clock — see Status Update below)
+## GOAT started: 2026-08-21 | Target end: 2026-09-20 (independent clock — see Status Update below)
 
 **Purpose:** Validate MINA/USDT and KAVA/USDT backtest results against real
 MEXC kline data before any capital allocation. Both pairs passed the 6/6
@@ -152,6 +153,67 @@ totals are untouched. `data/ETHWUSDT_1h.csv` and `data/ETHWUSDT_fills.csv`
 are kept in the repo for reproducibility of this analysis, not as live
 paper-trade inputs.
 
+Full onboarding-evaluation record (rejected — not a live pair):
+`docs/HANDOFF_ETHWUSDT.md`.
+
+---
+
+## Status Update — 2026-08-21: GOATUSDT added
+
+**GOAT/USDT joined this paper trade on 2026-08-21**, relayed via an external
+"wave 5" volume-band screen and deep-validation thread — not authored in this
+repo, and unlike the SFP/XYO/ETHW handoffs, **no artifact of that thread (wave
+counts, the 14-pair diff, `mexc_client.py`, or a `KILL_LOG.md` entry) exists
+anywhere in this repo or host.** The relayed claim is that GOAT beats both
+negative controls decisively (93% pass vs 77%/37%) and is fee-robust. This repo
+cannot independently verify those specific percentages and does not treat them
+as a gate pass on their own, per standing practice.
+
+**Pool-size sanity check (done first, before trusting the handoff at all):**
+the wave 5 screen reported 898 USDT pairs in the 30k-90k 24h-quoteVolume band,
+up >3.5x from wave 4's 244 pairs in roughly 24 hours — large enough to warrant
+checking for a data-lag or query bug before trusting anything downstream of it.
+Re-querying MEXC's public ticker endpoint live on 2026-08-21 found **945** USDT
+pairs currently in that band — consistent with (slightly above) wave 5's count,
+not a reversion to wave 4's ~244. **Verdict: STABLE** — a real, currently-still-
+elevated market condition (broad volume spike / listing wave), not a transient
+bug. GOAT's own gate result below does not depend on this pool-size figure
+either way; the check was to decide whether wave 5's "14 genuinely new pairs"
+framing was trustworthy context, not to validate GOAT itself.
+
+**This gate was re-run directly against GOAT/USDT using this repo's actual
+methodology** (same `data_fetch.py` → `simulator.py` → `analytics.py` pipeline,
+flat 1.0% spread, fresh MEXC 1h klines, 2026-08-01 to 2026-08-21, 20.8 days) —
+the same reconciliation process used for SFP, XYO, and ETHW. Result: **6/6 gate
+pass**, 311 fills, positive AS at both t+1h (+0.0206%) and t+4h (+0.0189%). See
+GATE.md "Results — GOAT/USDT Added" for the full table and two watch items
+flagged at registration: mean net/forced-close of -0.5043% (already past the
+-0.30% weekly-monitoring guardrail, though G3 still clears because the
+forced-close rate is only 14.2%), and a mild negative ask-fill AS asymmetry
+(-0.0609% at t+1h) not seen in XYO or SFP. Neither is disqualifying; both are
+logged for early weekly-check attention.
+
+GOAT is paper-traded at the same flat 1.0% spread and $50/fill notional as the
+other four pairs — both remain single global constants in
+`paper_trade.py`/`paper_report.py`, no per-pair tuning, so no reconciliation
+flag applies here.
+
+**GOAT runs on its own independent 30-day clock**, started 2026-08-21 (its own
+first paper-trade run, seed bar 2026-08-21T18:00:00Z), decision date
+**2026-09-20** — tracked separately from MINA's 2026-09-13, SFP's 2026-09-14,
+and XYO's 2026-09-19 decision dates. Adding GOAT did not touch MINA's, SFP's,
+or XYO's `start_date_utc` or live totals (verified via `--dry-run`/`--status`
+before and after).
+
+Full onboarding record, including the un-verifiable-handoff caveat above in one
+place: `docs/HANDOFF_GOATUSDT.md`.
+
+**ANIMEUSDT was also part of the wave 5 screen and was killed upstream** (fee-
+sensitivity-cliff / toxic-flow rationale, recorded in the external thread's own
+`KILL_LOG.md`, not this repo's). It is **not** a paper-trade candidate and is
+correctly absent from `PAIRS` in every script in this repo — no action taken
+here beyond confirming that absence.
+
 ---
 
 ## What This Is (and Is Not)
@@ -175,7 +237,7 @@ reasonable for this market structure over an extended window.
 
 | Parameter         | Value    |
 |---|---|
-| Pairs             | MINA/USDT, KAVA/USDT, SFP/USDT, XYO/USDT |
+| Pairs             | MINA/USDT, KAVA/USDT, SFP/USDT, XYO/USDT, GOAT/USDT |
 | Spread            | 1.0% (0.5% each side from mid) — same flat convention for all pairs |
 | Mid reference     | Previous 1h bar's close |
 | Max hold          | 3 bars (3 hours) before forced close |
@@ -241,7 +303,7 @@ Run `python src/paper_report.py` and verify, for each active pair:
 Log findings in the Results section below. Each pair is checked against its own
 clock (MINA/KAVA weekly boundaries land on 2026-08-21/28, 2026-09-04; SFP's land
 one day later: 2026-08-22/29, 2026-09-05; XYO's land 2026-08-27, 2026-09-03,
-2026-09-10).
+2026-09-10; GOAT's land 2026-08-28, 2026-09-04, 2026-09-11).
 
 ### MINA-specific monitoring
 
@@ -298,6 +360,28 @@ fee-robustness holding flat at fr=0.25 across the full 0–5bps fee range.
 python src/paper_trade.py --suspend XYOUSDT
 ```
 
+### GOAT-specific monitoring
+
+GOAT's registered gate run (2026-08-21, see GATE.md) passed 6/6 with positive AS
+at both t+1h and t+4h, but flagged two watch items at onboarding: mean
+net/forced-close of -0.5043% (already past the -0.30% "Stop level" guardrail
+below — the same metric whose severity sank ETHW's G3, though GOAT's low 14.2%
+forced-close rate keeps G3 positive here) and a mild negative ask-fill AS
+asymmetry (-0.0609% at t+1h, vs XYO's positive both sides and SFP's near-zero
+both sides). See `docs/HANDOFF_GOATUSDT.md` for the full detail.
+
+**Stop condition:** same as the other pairs — if GOAT bid-fill AS at t+1h drops
+below -0.50%, suspend immediately:
+
+```bash
+python src/paper_trade.py --suspend GOATUSDT
+```
+
+Also watch the forced-close guardrail specifically for GOAT given its
+already-elevated registered value: two consecutive weekly checks with mean
+net/forced-close still below -0.30% should be treated as a live confirmation of
+the registration-time flag, not a new surprise.
+
 ---
 
 ## Files
@@ -308,9 +392,17 @@ python src/paper_trade.py --suspend XYOUSDT
 | `data/paper_trade_events.csv` | Append-only event log: every fill and RT outcome |
 | `src/paper_trade.py` | Hourly runner |
 | `src/paper_report.py` | P&L and adverse-selection report |
+| `docs/HANDOFF_<PAIR>.md` | Per-pair onboarding record: which run/handoff passed it, the gate metrics that justified adding it, date added, decision date, watch items at onboarding |
 
 The events CSV is the canonical record. If the state JSON is ever lost or
 corrupted, it can be reconstructed by replaying the events.
+
+**Handoff docs on file:** `docs/HANDOFF_XYOUSDT.md`, `docs/HANDOFF_ETHWUSDT.md`
+(evaluated, rejected — kept for the record, not a live pair), and
+`docs/HANDOFF_GOATUSDT.md`. MINA/KAVA predate the external-handoff pattern (they
+were this gate's original two candidates, not sourced from a deep-validation
+thread) and SFP's watch items are already documented inline above, so none of
+those three get a separate file.
 
 ---
 
@@ -365,11 +457,30 @@ negative-control analog to KAVA's "loses to random entry" flag — its deeper
 validation cleared that check decisively — so no early-suspicion trigger beyond
 the standard AS/forced-close stop conditions applies here yet.)
 
+### GOAT decision — 2026-09-20 (30 days from 2026-08-21, its own clock)
+
+**Proceed to capital ($200 GOAT, $50/fill) if:**
+- [ ] GOAT: AS at t+1h > -0.15% × spread  (G4 maintained)
+- [ ] GOAT: AS at t+4h > -0.30% × spread  (G5 maintained)
+- [ ] GOAT: bid-fill AS at t+1h did NOT drop below -0.50% at any point
+- [ ] GOAT: forced-close rate < 95%
+- [ ] Total realized P&L across 30 days: positive (any positive)
+- [ ] Mean net/forced-close has not stayed below -0.30% for 2+ consecutive
+      weekly checks (registration-time watch item, see `docs/HANDOFF_GOATUSDT.md`)
+
+**Kill if:** GOAT bid-fill AS at t+1h < -0.50% at any weekly check, or
+forced-close rate > 95% for 2 consecutive weeks. Unlike SFP/XYO, GOAT's relayed
+deep-validation numbers (93% vs 77%/37%) could not be independently verified by
+this repo — no handoff artifact exists here — so this repo's own 30-day paper
+trade carries more of the evidentiary weight for GOAT than it did for the other
+three added pairs.
+
 ### Combined capital cap
 
-If MINA, SFP, and XYO all pass their respective decisions: $200/pair, $50/fill,
-$600 total (KAVA excluded, already suspended). Any single pair passing alone
-still counts as meaningful validation of the underlying hypothesis on its own.
+If MINA, SFP, XYO, and GOAT all pass their respective decisions: $200/pair,
+$50/fill, $800 total (KAVA excluded, already suspended). Any single pair passing
+alone still counts as meaningful validation of the underlying hypothesis on its
+own.
 
 ---
 
@@ -484,5 +595,40 @@ Verified via `--dry-run`/`--status` before and after that MINA's and SFP's
 ---
 
 ## Final Verdict — XYO (2026-09-19)
+
+*TBD*
+
+---
+
+## Results — GOAT (weekly append, independent clock)
+
+### Week 1 — 2026-08-21 to 2026-08-28
+
+**2026-08-21:** GOATUSDT initialised (seed bar 2026-08-21T18:00:00Z, first
+trading bar 2026-08-21T19:00:00Z). Registered gate re-run at this repo's flat
+1.0% spread: 6/6 pass, 311 fills, positive bid/ask AS at t+1h and t+4h — see
+GATE.md. Two watch items logged at registration (mean net/forced-close
+-0.5043%, mild negative ask-fill AS asymmetry) — see
+`docs/HANDOFF_GOATUSDT.md`. Verified via `--dry-run`/`--status` before and
+after that MINA's, SFP's, and XYO's `start_date_utc` and live totals were
+untouched by the addition.
+
+*Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
+
+### Week 2 — 2026-08-28 to 2026-09-04
+
+*TBD*
+
+### Week 3 — 2026-09-04 to 2026-09-11
+
+*TBD*
+
+### Week 4 — 2026-09-11 to 2026-09-20
+
+*TBD*
+
+---
+
+## Final Verdict — GOAT (2026-09-20)
 
 *TBD*

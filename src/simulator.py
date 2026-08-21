@@ -335,7 +335,7 @@ def main() -> None:
                         help="Bars before forced close (default 3 = 3 hours)")
     args = parser.parse_args()
 
-    pairs = [args.pair] if args.pair else ["MINAUSDT", "KAVAUSDT", "SFPUSDT", "XYOUSDT"]
+    pairs = [args.pair] if args.pair else ["MINAUSDT", "KAVAUSDT", "SFPUSDT", "XYOUSDT", "GOATUSDT"]
     all_gates: dict[str, dict] = {}
 
     for pair in pairs:

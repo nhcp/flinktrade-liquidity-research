@@ -359,3 +359,74 @@ this analysis are kept in the repo for the record; `PAIRS` in
 `paper_trade.py`/`paper_report.py`/`simulator.py`/`analytics.py`/`data_fetch.py`
 is unchanged (MINA/KAVA/SFP/XYO only). See PAPER_TRADE.md "Status Update —
 2026-08-20: ETHWUSDT evaluated, not added" for the pool-level note.
+
+---
+
+## Results — GOAT/USDT Added — Simulation Date 2026-08-21
+
+**Source of candidate:** an external "wave 5" volume-band screen plus deep-validation
+thread (not authored in this repo, no artifact of it exists on this host) relayed
+GOAT/USDT as a fourth pair to clear the deep-validation battery used for SFP and XYO
+(93% pass vs 77%/37% on its two negative controls, fee-robust). **This repo has no
+way to independently verify those specific percentages** — unlike the SFP/XYO/ETHW
+handoffs, which at least referenced `KILL_LOG.md` entries on the external
+`liquidity_provision_v2` thread, no equivalent artifact for GOAT or the wave 5 run
+(pool counts, the 14-pair diff, ANIMEUSDT's kill rationale) exists anywhere in this
+repo, this host's filesystem, or its shell history. Per this repo's standing practice
+(see SFP/XYO/ETHW notes above), relayed numbers are never treated as a gate pass on
+their own — the actual gate below is what decided this.
+
+**Pool-size sanity check performed before trusting the handoff (see KILL_LOG.md /
+task record):** re-queried MEXC's public ticker endpoint live on 2026-08-21 for USDT
+pairs with 24h quoteVolume in the wave 5 screen's reported 30k-90k band. Current
+count: **945 pairs** — consistent with (in fact slightly above) wave 5's reported 898,
+not a reversion to wave 4's ~244. Verdict: **STABLE**, real market condition, not a
+data-lag artifact. `mexc_client.py` itself (the actual script wave 5 used) is not
+present in this repo, so this was reconstructed against MEXC's public
+`/api/v3/ticker/24hr` endpoint using this repo's own urllib-based client conventions
+plus `urlencode` query building, not a byte-identical replay of the original script.
+
+**This gate was re-run directly against GOAT/USDT using this repo's actual
+methodology** (same `simulator.py`/`analytics.py`, flat 1.0% spread, fresh MEXC 1h
+klines, 2026-08-01 to 2026-08-21, 20.8 days) — the same reconciliation process used
+for SFP, XYO, and ETHW — to get an apples-to-apples registered result:
+
+| Criterion | Threshold | GOAT/USDT |
+|---|---|---|
+| G1: Total fills | ≥ 5 | 311 ✓ |
+| G2: Net/complete RT | > 0.10% | +1.0000% ✓ |
+| G3: Fill-adj monthly | > 0 | +63.9324% ✓ |
+| G4: AS at t+1h | > -0.15% | +0.0206% PASS ✓ |
+| G5: AS at t+4h | > -0.30% | +0.0189% PASS ✓ |
+| G6: Sharpe | ≥ 0.3 | 13.349 ✓ |
+| DQ: Forced-close rate | ≤ 95% | 14.2% ✓ |
+| **OVERALL** | **All 6** | **6/6 PASS** |
+
+Bid-fill AS@1h = +0.1012% (n=156), ask-fill AS@1h = -0.0609% (n=154) — unlike XYO
+(both sides positive) or SFP (both near-zero), GOAT's ask-fill side is mildly
+negative. Still comfortably inside G4's -0.15% bound and far from the -0.50%
+disqualifying threshold, but a new asymmetry pattern not seen in the other three
+active pairs, worth watching.
+
+**Watch item — forced-close severity is the most notable flag at registration.**
+Mean net/forced close = **-0.5043%**, already past the -0.30% "Stop level" guardrail
+PAPER_TRADE.md's weekly-monitoring table uses (MINA -0.28%, KAVA -0.21%, SFP -0.30%,
+XYO -0.21%, ETHW -0.71% for comparison). This is the same metric whose severity sank
+ETHW's G3 — GOAT does **not** fail G3 here because its forced-close rate is low
+(14.2% of fill events, in line with XYO's 14.7%) so complete-RT gains dominate the
+monthly figure, but the per-forced-close loss itself is worse than every currently
+active pair except the rejected ETHW. Flagged for close attention in early weekly
+checks, same discipline as SFP's Week 1 forced-close flag.
+
+**Caveat (carried over from KAVA's lesson):** a clean 6/6 on a single ~20-day window
+is a screen, not proof. Unlike KAVA, the relayed deep-validation numbers report real
+separation from negative controls — but this repo cannot verify those numbers itself,
+so the 30-day live paper trade carries more of the evidentiary weight for GOAT than
+it did for SFP/XYO, where the relayed battery could at least be cross-checked against
+a `KILL_LOG.md`-referenced thread.
+
+**Verdict: PROCEED to paper trade**, on the strength of this repo's own clean 6/6
+reconciliation, with the forced-close severity and ask-side AS asymmetry logged as
+explicit watch items rather than silently passed over. See PAPER_TRADE.md for GOAT's
+paper-trade setup and independent 30-day decision clock (2026-08-21 → 2026-09-20),
+and `docs/HANDOFF_GOATUSDT.md` for the full onboarding record.

@@ -25,7 +25,7 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-PAIRS = ["MINAUSDT", "KAVAUSDT", "SFPUSDT", "XYOUSDT"]
+PAIRS = ["MINAUSDT", "KAVAUSDT", "SFPUSDT", "XYOUSDT", "GOATUSDT"]
 DATA_DIR = Path(__file__).parent.parent / "data"
 STATE_FILE = DATA_DIR / "paper_trade_state.json"
 EVENTS_FILE = DATA_DIR / "paper_trade_events.csv"

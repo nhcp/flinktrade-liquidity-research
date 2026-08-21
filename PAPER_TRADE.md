@@ -3,6 +3,7 @@
 ## SFP started: 2026-08-15 | Target end: 2026-09-14 (independent clock — see Status Update below)
 ## XYO started: 2026-08-20 | Target end: 2026-09-19 (independent clock — see Status Update below)
 ## GOAT started: 2026-08-21 | Target end: 2026-09-20 (independent clock — see Status Update below)
+## XPR/PIPPIN/S started: 2026-08-21 | Target end: 2026-09-20 (independent clocks — see Status Update below)
 
 **Purpose:** Validate MINA/USDT and KAVA/USDT backtest results against real
 MEXC kline data before any capital allocation. Both pairs passed the 6/6
@@ -216,6 +217,60 @@ here beyond confirming that absence.
 
 ---
 
+## Status Update — 2026-08-21: XPRUSDT, PIPPINUSDT, SUSDT added
+
+**XPR/USDT, PIPPIN/USDT, and S/USDT joined this paper trade on 2026-08-21**,
+relayed via an external "widescreen" deep-validation screen/thread — not
+authored in this repo. That same relay covered KAVAUSDT (already known here,
+already suspended — not re-evaluated) and flagged CSPRUSDT and NILUSDT as
+tension cases, both verdicted **KILL** by that external screen. CSPR and NIL
+are **not** onboarded here and are **not** added anywhere in this repo or the
+flinktrade.com dashboard — they stay excluded pending further review, per the
+task that requested this batch. As with GOAT's wave-5 relay, no artifact of
+this widescreen thread exists anywhere in this repo or host (checked by
+search before writing this section), so the relayed claim was not treated as
+a gate pass on its own for any of the three pairs.
+
+**This repo's own reconciliation** (same `data_fetch.py` → `simulator.py` →
+`analytics.py` pipeline, flat 1.0% spread, fresh MEXC 1h klines, 2026-08-01 to
+2026-08-21, 20.8 days — same process used for SFP/XYO/ETHW/GOAT) is what
+actually decided onboarding. All three independently reconciled to a clean
+**6/6 gate pass**:
+
+- **XPRUSDT:** 249 fills, both-sides-positive AS (+0.2683% @1h, +0.3079% @4h),
+  positive mean net/forced-close (+0.1003%) — the cleanest of the three, no
+  watch items.
+- **PIPPINUSDT:** 361 fills, mildly negative but in-bounds AS (-0.0831% @1h,
+  -0.0403% @4h). **Watch item:** mean net/forced-close of -1.1084% — worse
+  than every other pair in the pool, including the rejected ETHW (-0.71%);
+  G3 still clears because forced-close rate is low (11.1%) and complete-RT
+  volume is high.
+- **SUSDT:** 248 fills, in-bounds blended AS (-0.0864% @1h, -0.1146% @4h) but
+  a pronounced ask-side asymmetry (-0.1905% @1h, largest of any active pair).
+  **Watch items:** that asymmetry, plus mean net/forced-close of -0.6850%
+  (second-worst in the pool) and the thinnest G3 margin of the three
+  (+14.9011%).
+
+Full detail in GATE.md "Results — XPRUSDT / PIPPINUSDT / SUSDT Evaluated".
+All three are paper-traded at the same flat 1.0% spread and $50/fill notional
+as every other pair — single global constants in `paper_trade.py` /
+`paper_report.py`, no per-pair tuning.
+
+**Each runs on its own independent 30-day clock**, all three started
+2026-08-21 (seed bar 2026-08-21T21:00:00Z, first trading bar
+2026-08-21T22:00:00Z, `start_date_utc` 2026-08-21T22:12:00Z), decision date
+**2026-09-20** for all three — same calendar decision date as GOAT since they
+joined the same day, but each tracked as its own independent clock in
+`paper_trade_state.json`, not shared with GOAT's or any other pair's.
+Verified via `--dry-run`/`--status` before and after that MINA's, SFP's,
+XYO's, and GOAT's `start_date_utc` and live totals were untouched by the
+addition.
+
+Full onboarding records: `docs/HANDOFF_XPRUSDT.md`, `docs/HANDOFF_PIPPINUSDT.md`,
+`docs/HANDOFF_SUSDT.md`.
+
+---
+
 ## What This Is (and Is Not)
 
 **What it is:** A live replay of the backtest strategy using MEXC's public
@@ -237,7 +292,7 @@ reasonable for this market structure over an extended window.
 
 | Parameter         | Value    |
 |---|---|
-| Pairs             | MINA/USDT, KAVA/USDT, SFP/USDT, XYO/USDT, GOAT/USDT |
+| Pairs             | MINA/USDT, KAVA/USDT, SFP/USDT, XYO/USDT, GOAT/USDT, XPR/USDT, PIPPIN/USDT, S/USDT |
 | Spread            | 1.0% (0.5% each side from mid) — same flat convention for all pairs |
 | Mid reference     | Previous 1h bar's close |
 | Max hold          | 3 bars (3 hours) before forced close |
@@ -303,7 +358,9 @@ Run `python src/paper_report.py` and verify, for each active pair:
 Log findings in the Results section below. Each pair is checked against its own
 clock (MINA/KAVA weekly boundaries land on 2026-08-21/28, 2026-09-04; SFP's land
 one day later: 2026-08-22/29, 2026-09-05; XYO's land 2026-08-27, 2026-09-03,
-2026-09-10; GOAT's land 2026-08-28, 2026-09-04, 2026-09-11).
+2026-09-10; GOAT's land 2026-08-28, 2026-09-04, 2026-09-11; XPR/PIPPIN/S's land
+2026-08-28, 2026-09-04, 2026-09-11 — same as GOAT's since they share a start date,
+but each pair's clock is independently tracked).
 
 ### MINA-specific monitoring
 
@@ -382,6 +439,63 @@ already-elevated registered value: two consecutive weekly checks with mean
 net/forced-close still below -0.30% should be treated as a live confirmation of
 the registration-time flag, not a new surprise.
 
+### XPR-specific monitoring
+
+XPR's registered gate run (2026-08-21, see GATE.md) was the cleanest of the
+three pairs added that day — both bid and ask AS positive at t+1h (bid
++0.4039%, ask +0.1139%), no directional-exposure flag, and a positive mean
+net/forced-close (+0.1003%, better than every other active pair). No watch
+items were noted at onboarding.
+
+**Stop condition:** same as the other pairs — if XPR bid-fill AS at t+1h
+drops below -0.50%, suspend immediately:
+
+```bash
+python src/paper_trade.py --suspend XPRUSDT
+```
+
+### PIPPIN-specific monitoring
+
+PIPPIN's registered gate run (2026-08-21, see GATE.md) passed 6/6 but flagged
+the most severe forced-close watch item of any active pair: mean
+net/forced-close of **-1.1084%**, worse than every other pair in the pool
+including the rejected ETHW's -0.71%. G3 clears only because forced-close
+rate is low (11.1%) and complete-RT volume is high — the same mechanism that
+kept GOAT's G3 positive, but at a more severe per-event loss than GOAT's.
+
+**Stop condition:** same as the other pairs — if PIPPIN bid-fill AS at t+1h
+drops below -0.50%, suspend immediately:
+
+```bash
+python src/paper_trade.py --suspend PIPPINUSDT
+```
+
+Given the severity of the registered forced-close flag, treat two consecutive
+weekly checks with mean net/forced-close still below -0.30% (the standard
+guardrail) as a live confirmation warranting closer review, not routine
+noise — the registered value is already more than 3x that guardrail.
+
+### S-specific monitoring
+
+S's registered gate run (2026-08-21, see GATE.md) passed 6/6 with the
+thinnest G3 margin of the three pairs added that day (+14.9011%) and two
+watch items: a pronounced ask-side AS asymmetry (-0.1905% at t+1h, the
+largest of any active pair, though the blended G4 figure of -0.0864% still
+clears with headroom) and an elevated mean net/forced-close (-0.6850%,
+second-worst in the pool after PIPPIN).
+
+**Stop condition:** same as the other pairs — if S bid-fill AS at t+1h drops
+below -0.50%, suspend immediately:
+
+```bash
+python src/paper_trade.py --suspend SUSDT
+```
+
+Because S's G3 margin is the thinnest of any pair added in this batch, weekly
+checks should watch both the forced-close guardrail and any drop in
+complete-RT volume — either alone eroding further could flip G3 negative
+faster here than for XPR or PIPPIN.
+
 ---
 
 ## Files
@@ -398,11 +512,11 @@ The events CSV is the canonical record. If the state JSON is ever lost or
 corrupted, it can be reconstructed by replaying the events.
 
 **Handoff docs on file:** `docs/HANDOFF_XYOUSDT.md`, `docs/HANDOFF_ETHWUSDT.md`
-(evaluated, rejected — kept for the record, not a live pair), and
-`docs/HANDOFF_GOATUSDT.md`. MINA/KAVA predate the external-handoff pattern (they
-were this gate's original two candidates, not sourced from a deep-validation
-thread) and SFP's watch items are already documented inline above, so none of
-those three get a separate file.
+(evaluated, rejected — kept for the record, not a live pair), `docs/HANDOFF_GOATUSDT.md`,
+`docs/HANDOFF_XPRUSDT.md`, `docs/HANDOFF_PIPPINUSDT.md`, and `docs/HANDOFF_SUSDT.md`.
+MINA/KAVA predate the external-handoff pattern (they were this gate's original two
+candidates, not sourced from a deep-validation thread) and SFP's watch items are
+already documented inline above, so none of those three get a separate file.
 
 ---
 
@@ -475,12 +589,60 @@ this repo — no handoff artifact exists here — so this repo's own 30-day pape
 trade carries more of the evidentiary weight for GOAT than it did for the other
 three added pairs.
 
+### XPR decision — 2026-09-20 (30 days from 2026-08-21, its own clock)
+
+**Proceed to capital ($200 XPR, $50/fill) if:**
+- [ ] XPR: AS at t+1h > -0.15% × spread  (G4 maintained)
+- [ ] XPR: AS at t+4h > -0.30% × spread  (G5 maintained)
+- [ ] XPR: bid-fill AS at t+1h did NOT drop below -0.50% at any point
+- [ ] XPR: forced-close rate < 95%
+- [ ] Total realized P&L across 30 days: positive (any positive)
+
+**Kill if:** XPR bid-fill AS at t+1h < -0.50% at any weekly check, or
+forced-close rate > 95% for 2 consecutive weeks. XPR had no watch items at
+registration — the cleanest of the three pairs added 2026-08-21 — so no
+additional early-suspicion trigger beyond the standard stop conditions.
+
+### PIPPIN decision — 2026-09-20 (30 days from 2026-08-21, its own clock)
+
+**Proceed to capital ($200 PIPPIN, $50/fill) if:**
+- [ ] PIPPIN: AS at t+1h > -0.15% × spread  (G4 maintained)
+- [ ] PIPPIN: AS at t+4h > -0.30% × spread  (G5 maintained)
+- [ ] PIPPIN: bid-fill AS at t+1h did NOT drop below -0.50% at any point
+- [ ] PIPPIN: forced-close rate < 95%
+- [ ] Total realized P&L across 30 days: positive (any positive)
+- [ ] Mean net/forced-close has not stayed below -0.30% for 2+ consecutive
+      weekly checks (registration-time watch item — registered value
+      -1.1084% is the worst in the pool; see `docs/HANDOFF_PIPPINUSDT.md`)
+
+**Kill if:** PIPPIN bid-fill AS at t+1h < -0.50% at any weekly check, or
+forced-close rate > 95% for 2 consecutive weeks. This pair carries the
+heaviest registration-time watch item of the three added 2026-08-21.
+
+### S decision — 2026-09-20 (30 days from 2026-08-21, its own clock)
+
+**Proceed to capital ($200 S, $50/fill) if:**
+- [ ] S: AS at t+1h > -0.15% × spread  (G4 maintained)
+- [ ] S: AS at t+4h > -0.30% × spread  (G5 maintained)
+- [ ] S: bid-fill AS at t+1h did NOT drop below -0.50% at any point
+- [ ] S: forced-close rate < 95%
+- [ ] Total realized P&L across 30 days: positive (any positive)
+- [ ] Mean net/forced-close has not stayed below -0.30% for 2+ consecutive
+      weekly checks, and ask-fill AS at t+1h has not deepened materially past
+      its registered -0.1905% (registration-time watch items; see
+      `docs/HANDOFF_SUSDT.md`)
+
+**Kill if:** S bid-fill AS at t+1h < -0.50% at any weekly check, or
+forced-close rate > 95% for 2 consecutive weeks. S has the thinnest
+registered G3 margin (+14.9011%) of any pair added 2026-08-21.
+
 ### Combined capital cap
 
-If MINA, SFP, XYO, and GOAT all pass their respective decisions: $200/pair,
-$50/fill, $800 total (KAVA excluded, already suspended). Any single pair passing
-alone still counts as meaningful validation of the underlying hypothesis on its
-own.
+If MINA, SFP, XYO, GOAT, XPR, PIPPIN, and S all pass their respective
+decisions: $200/pair, $50/fill, $1,400 total (KAVA excluded, already
+suspended; CSPR and NIL excluded, both KILL on the external screen, not
+onboarded). Any single pair passing alone still counts as meaningful
+validation of the underlying hypothesis on its own.
 
 ---
 
@@ -630,5 +792,107 @@ untouched by the addition.
 ---
 
 ## Final Verdict — GOAT (2026-09-20)
+
+*TBD*
+
+---
+
+## Results — XPR (weekly append, independent clock)
+
+### Week 1 — 2026-08-21 to 2026-08-28
+
+**2026-08-21:** XPRUSDT initialised (seed bar 2026-08-21T21:00:00Z, first
+trading bar 2026-08-21T22:00:00Z). Registered gate re-run at this repo's flat
+1.0% spread: 6/6 pass, 249 fills, positive bid/ask AS at t+1h and t+4h, no
+watch items — see GATE.md and `docs/HANDOFF_XPRUSDT.md`. Verified via
+`--dry-run`/`--status` before and after that MINA's, SFP's, XYO's, and GOAT's
+`start_date_utc` and live totals were untouched.
+
+*Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
+
+### Week 2 — 2026-08-28 to 2026-09-04
+
+*TBD*
+
+### Week 3 — 2026-09-04 to 2026-09-11
+
+*TBD*
+
+### Week 4 — 2026-09-11 to 2026-09-20
+
+*TBD*
+
+---
+
+## Final Verdict — XPR (2026-09-20)
+
+*TBD*
+
+---
+
+## Results — PIPPIN (weekly append, independent clock)
+
+### Week 1 — 2026-08-21 to 2026-08-28
+
+**2026-08-21:** PIPPINUSDT initialised (seed bar 2026-08-21T21:00:00Z, first
+trading bar 2026-08-21T22:00:00Z). Registered gate re-run at this repo's flat
+1.0% spread: 6/6 pass, 361 fills, in-bounds AS at t+1h and t+4h — see GATE.md
+and `docs/HANDOFF_PIPPINUSDT.md`. Watch item logged at registration: mean
+net/forced-close of -1.1084%, the worst in the pool. Verified via
+`--dry-run`/`--status` before and after that MINA's, SFP's, XYO's, and GOAT's
+`start_date_utc` and live totals were untouched.
+
+*Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
+
+### Week 2 — 2026-08-28 to 2026-09-04
+
+*TBD*
+
+### Week 3 — 2026-09-04 to 2026-09-11
+
+*TBD*
+
+### Week 4 — 2026-09-11 to 2026-09-20
+
+*TBD*
+
+---
+
+## Final Verdict — PIPPIN (2026-09-20)
+
+*TBD*
+
+---
+
+## Results — S (weekly append, independent clock)
+
+### Week 1 — 2026-08-21 to 2026-08-28
+
+**2026-08-21:** SUSDT initialised (seed bar 2026-08-21T21:00:00Z, first
+trading bar 2026-08-21T22:00:00Z). Registered gate re-run at this repo's flat
+1.0% spread: 6/6 pass, 248 fills, in-bounds blended AS at t+1h and t+4h — see
+GATE.md and `docs/HANDOFF_SUSDT.md`. Watch items logged at registration:
+pronounced ask-fill AS asymmetry (-0.1905% at t+1h) and elevated mean
+net/forced-close (-0.6850%). Verified via `--dry-run`/`--status` before and
+after that MINA's, SFP's, XYO's, and GOAT's `start_date_utc` and live totals
+were untouched.
+
+*Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
+
+### Week 2 — 2026-08-28 to 2026-09-04
+
+*TBD*
+
+### Week 3 — 2026-09-04 to 2026-09-11
+
+*TBD*
+
+### Week 4 — 2026-09-11 to 2026-09-20
+
+*TBD*
+
+---
+
+## Final Verdict — S (2026-09-20)
 
 *TBD*

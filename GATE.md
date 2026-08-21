@@ -430,3 +430,133 @@ reconciliation, with the forced-close severity and ask-side AS asymmetry logged 
 explicit watch items rather than silently passed over. See PAPER_TRADE.md for GOAT's
 paper-trade setup and independent 30-day decision clock (2026-08-21 → 2026-09-20),
 and `docs/HANDOFF_GOATUSDT.md` for the full onboarding record.
+
+---
+
+## Results — XPRUSDT / PIPPINUSDT / SUSDT Evaluated — Simulation Date 2026-08-21
+
+**Source of candidates:** relayed as the outcome of an external "widescreen"
+deep-validation screen/thread (not authored in this repo) covering a batch of
+pairs. That relay included KAVAUSDT (already known to this repo — suspended
+2026-08-15, see Status Update above; not re-evaluated here), CSPRUSDT and
+NILUSDT (both flagged by the external screen as tension cases and both
+verdicted **KILL** there — not candidates for onboarding, and correctly left
+out of `PAIRS` in every script and out of this task's dashboard work pending
+further review), and XPRUSDT, PIPPINUSDT, and SUSDT as pairs relayed to clear
+that screen's battery.
+
+**As with GOAT's wave-5 relay, no artifact of this widescreen thread — pool
+counts, a `KILL_LOG.md` entry, the specific negative-control or
+fee-sensitivity percentages — exists anywhere in this repo, this host's
+filesystem, or its shell history** (checked by search before writing this
+section). Per this repo's standing practice (SFP/XYO/ETHW/GOAT notes above),
+a relayed pass is never treated as a gate pass on its own. **Only this repo's
+own independent reconciliation below — not the relayed claim — is the basis
+for any onboarding decision made here.**
+
+**Reconciliation methodology (identical to SFP/XYO/ETHW/GOAT):** fresh
+`data_fetch.py` → `simulator.py` → `analytics.py` run against real MEXC 1h
+klines, 2026-08-01 to 2026-08-21 (20.8 days), at this repo's actual flat 1.0%
+spread / $50 notional convention — the same global constants used for every
+other pair, not per-pair tuned.
+
+### XPRUSDT
+
+| Criterion | Threshold | Result |
+|---|---|---|
+| G1: Total fills | ≥ 5 | 249 ✓ |
+| G2: Net/complete RT | > 0.10% | +1.0000% ✓ |
+| G3: Fill-adj monthly | > 0 | +79.0895% ✓ |
+| G4: AS at t+1h | > -0.15% | +0.2683% PASS ✓ |
+| G5: AS at t+4h | > -0.30% | +0.3079% PASS ✓ |
+| G6: Sharpe | ≥ 0.3 | 15.787 ✓ |
+| DQ: Forced-close rate | ≤ 95% | 19.4% ✓ |
+| **OVERALL** | **All 6** | **6/6 PASS** |
+
+Bid-fill AS@1h = +0.4039% (n=132), ask-fill AS@1h = +0.1139% (n=116) — both
+sides positive, no asymmetry flag, the cleanest AS profile of the three
+candidates in this batch (closest in shape to XYO's). Mean net/forced-close
+= **+0.1003%** — positive, better than every other pair in the pool
+(MINA -0.28%, KAVA -0.21%, SFP -0.30%, XYO -0.21%, ETHW -0.71% rejected,
+GOAT -0.5043%). **No watch items noted at onboarding.**
+
+**Verdict: PROCEED to paper trade.**
+
+### PIPPINUSDT
+
+| Criterion | Threshold | Result |
+|---|---|---|
+| G1: Total fills | ≥ 5 | 361 ✓ |
+| G2: Net/complete RT | > 0.10% | +1.0000% ✓ |
+| G3: Fill-adj monthly | > 0 | +51.4581% ✓ |
+| G4: AS at t+1h | > -0.15% | -0.0831% PASS ✓ |
+| G5: AS at t+4h | > -0.30% | -0.0403% PASS ✓ |
+| G6: Sharpe | ≥ 0.3 | 9.116 ✓ |
+| DQ: Forced-close rate | ≤ 95% | 11.1% ✓ |
+| **OVERALL** | **All 6** | **6/6 PASS** |
+
+Bid-fill AS@1h = -0.0959% (n=178), ask-fill AS@1h = -0.0707% (n=183) — both
+mildly negative but comfortably inside G4's -0.15% bound and far from the
+-0.50% disqualifying threshold.
+
+**Watch item — forced-close severity is the standout flag, worse than
+every pair in the pool including the rejected ETHW.** Mean net/forced-close
+= **-1.1084%**, versus MINA -0.28%, KAVA -0.21%, SFP -0.30%, XYO -0.21%, GOAT
+-0.5043%, and ETHW's rejected -0.71%. G3 still clears decisively (+51.4581%)
+only because PIPPIN's forced-close rate is low (11.1% of fill events) and its
+complete-RT volume is high (160 complete RTs, 230.9/month) — the same
+mechanism that let GOAT's G3 clear despite an elevated forced-close loss, but
+here the per-forced-close severity itself exceeds even ETHW's rejected
+number. This is flagged explicitly, not waved through, given it is the same
+metric whose severity sank ETHW's G3 in an adjacent pair evaluation. A spread
+sweep was not re-run for this batch (unlike ETHW's); this is a registration-
+time flag for close weekly-check attention, not a re-litigation of the G3
+pass itself.
+
+**Verdict: PROCEED to paper trade**, with the forced-close-severity watch
+item logged as the dominant thing to monitor.
+
+### SUSDT
+
+| Criterion | Threshold | Result |
+|---|---|---|
+| G1: Total fills | ≥ 5 | 248 ✓ |
+| G2: Net/complete RT | > 0.10% | +1.0000% ✓ |
+| G3: Fill-adj monthly | > 0 | +14.9011% ✓ |
+| G4: AS at t+1h | > -0.15% | -0.0864% PASS ✓ |
+| G5: AS at t+4h | > -0.30% | -0.1146% PASS ✓ |
+| G6: Sharpe | ≥ 0.3 | 5.312 ✓ |
+| DQ: Forced-close rate | ≤ 95% | 22.3% ✓ |
+| **OVERALL** | **All 6** | **6/6 PASS** |
+
+Bid-fill AS@1h = +0.0292% (n=117), ask-fill AS@1h = **-0.1905%** (n=130) — a
+more pronounced ask-side negative asymmetry than GOAT's (-0.0609%) or any
+other active pair, though the blended G4 figure (-0.0864%) still passes with
+headroom. Mean net/forced-close = **-0.6850%**, past the -0.30% weekly
+guardrail and the second-most severe in the pool after PIPPIN above (worse
+than the rejected ETHW's -0.71% is not quite reached, but close). G3 clears
+(+14.9011%, the thinnest margin of the three pairs in this batch) because
+complete RTs still outnumber forced closes 96 to 55.
+
+**Watch items — two, both flagged rather than silently passed:**
+1. Ask-fill AS asymmetry (-0.1905% at t+1h) — largest of any active pair.
+2. Mean net/forced-close (-0.6850%) — second-worst in the pool, and SUSDT's
+   G3 margin (+14.9011%) is the thinnest of the three pairs added in this
+   batch, meaning it has the least headroom if forced-close severity or rate
+   worsens even slightly.
+
+**Verdict: PROCEED to paper trade**, with both watch items logged for close
+early weekly-check attention — this is the least comfortable pass of the
+three, though it still clears all 6 criteria cleanly today.
+
+### Summary
+
+All three of XPRUSDT, PIPPINUSDT, and SUSDT independently reconcile to a
+clean 6/6 pass at this repo's actual flat 1.0% / $50 methodology — the
+relayed widescreen claim was not taken at face value for any of them. See
+PAPER_TRADE.md for each pair's paper-trade setup and independent 30-day
+decision clock, and `docs/HANDOFF_XPRUSDT.md`, `docs/HANDOFF_PIPPINUSDT.md`,
+`docs/HANDOFF_SUSDT.md` for the full onboarding records. KAVAUSDT remains
+excluded (already suspended); CSPRUSDT and NILUSDT remain excluded per the
+external screen's own KILL verdict on both — neither is added to `PAIRS` in
+any script, and neither is added to the flinktrade.com dashboard.

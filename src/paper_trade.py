@@ -50,6 +50,44 @@ NOTIONAL_USDT = 50.0      # per fill (for dollar P&L tracking)
 MAKER_FEE = 0.0000        # MEXC: 0% maker on limit orders that add liquidity
 TAKER_FEE = 0.0005        # MEXC: 0.05% taker on forced close exit leg
 
+# ── Spread-width cohort (forward-test, see docs/SPREAD_WIDTH_COHORT_2026-08-22.md) ──
+# 7 live pairs x 6 widths (0.5-0.9% + a FRESH 1.0% control), all starting the
+# same day so width is the only variable. Every instance gets a distinct key
+# ("SYMBOL-WIDTH", e.g. "MINAUSDT-0.5") in state["pairs"] — this is what keeps
+# them fully separate from the 7 original entries in PAIRS above (unchanged,
+# untouched, still keyed by bare symbol e.g. "MINAUSDT" with original
+# start_date_utc and 1.0% spread). Same NOTIONAL_USDT/MAX_HOLD_BARS/fees as
+# every other instrument — only spread_pct varies per cohort group.
+COHORT_BASE_PAIRS = ["MINAUSDT", "SFPUSDT", "XYOUSDT", "GOATUSDT", "XPRUSDT", "PIPPINUSDT", "SUSDT"]
+COHORT_WIDTHS = [0.5, 0.6, 0.7, 0.8, 0.9]
+COHORT_FRESH_CONTROL_WIDTH = 1.0   # fresh 1.0% control, own start date — isolates spread-width
+                                    # effects from time-period effects (the gap in the prior
+                                    # single-window backtest sweep)
+
+
+def cohort_instance_id(symbol: str, width: float) -> str:
+    suffix = f"{width:.1f}-FRESH" if width == COHORT_FRESH_CONTROL_WIDTH else f"{width:.1f}"
+    return f"{symbol}-{suffix}"
+
+
+def _build_cohort_instruments() -> dict:
+    """instance_id -> {'symbol': MEXC symbol, 'spread_pct': float, 'width_label': str}"""
+    out = {}
+    for symbol in COHORT_BASE_PAIRS:
+        for width in COHORT_WIDTHS + [COHORT_FRESH_CONTROL_WIDTH]:
+            iid = cohort_instance_id(symbol, width)
+            label = "1.0% (fresh control)" if width == COHORT_FRESH_CONTROL_WIDTH else f"{width:.1f}%"
+            out[iid] = {"symbol": symbol, "spread_pct": width, "width_label": label}
+    return out
+
+
+COHORT_INSTRUMENTS = _build_cohort_instruments()   # 42 entries: 7 pairs x 6 widths
+COHORT_WIDTH_GROUPS = COHORT_WIDTHS + [COHORT_FRESH_CONTROL_WIDTH]  # ordering for grouped display
+COHORT_NOTES = {
+    "PIPPINUSDT": ("Known risk: forced-close severity worsens at narrower "
+                    "spreads (backtest finding, see docs/SPREAD_WIDTH_COHORT_2026-08-22.md)"),
+}
+
 EVENTS_HEADER = [
     "event_id", "run_utc", "pair", "event_type",
     "bar_open_ms", "bar_open_utc",
@@ -101,7 +139,8 @@ def _blank_state() -> dict:
             "start_date_utc": None,
             "last_run_utc": None,
         },
-        "pairs": {pair: _blank_pair_state() for pair in PAIRS},
+        "pairs": {pair: _blank_pair_state() for pair in PAIRS}
+                 | {iid: _blank_pair_state() for iid in COHORT_INSTRUMENTS},
     }
 
 
@@ -119,6 +158,13 @@ def load_state() -> dict:
                 pairs[pair] = _blank_pair_state()
             elif "start_date_utc" not in pairs[pair]:
                 pairs[pair]["start_date_utc"] = state.get("meta", {}).get("start_date_utc")
+        # Additive only: create blank state for any cohort instance not yet
+        # seen. Never reads or writes an existing PAIRS entry above — cohort
+        # instance keys (e.g. "MINAUSDT-0.5") are always distinct from the
+        # bare-symbol keys (e.g. "MINAUSDT") used by the original 7 pairs.
+        for instance_id in COHORT_INSTRUMENTS:
+            if instance_id not in pairs:
+                pairs[instance_id] = _blank_pair_state()
         return state
     return _blank_state()
 
@@ -217,16 +263,21 @@ def _make_eid(pair: str, event_type: str, bar_open_ms: int) -> str:
     return f"{pair}-{event_type}-{bar_open_ms}"
 
 
-def process_pair_bars(pair: str, ps: dict, bars: list[dict], run_utc: str) -> list[dict]:
+def process_pair_bars(pair: str, ps: dict, bars: list[dict], run_utc: str,
+                       spread_pct: float = SPREAD_PCT) -> list[dict]:
     """
     Process a chronological sequence of new completed bars for one pair.
 
     Each bar must have a 'prev_close' key set by the caller.
     Modifies ps (pair state) in-place.
     Returns list of event dicts to be appended to the events CSV.
+
+    spread_pct defaults to the global SPREAD_PCT (1.0%) — the original 7
+    pairs' call site below does not pass this, so their behavior is
+    unchanged. Cohort instruments pass their own width explicitly.
     """
     events: list[dict] = []
-    spread_half = SPREAD_PCT / 200.0   # fraction, half-spread
+    spread_half = spread_pct / 200.0   # fraction, half-spread
 
     for bar in bars:
         open_ms = bar["open_time_ms"]
@@ -320,7 +371,7 @@ def process_pair_bars(pair: str, ps: dict, bars: list[dict], run_utc: str) -> li
             entry_ms = min(ps["pending_bid"]["bar_open_ms"],
                            ps["pending_ask"]["bar_open_ms"])
             hold_bars = round((open_ms - entry_ms) / 3_600_000)
-            net_pct = round(SPREAD_PCT - 0.0, 5)   # 0% maker on both legs
+            net_pct = round(spread_pct - 0.0, 5)   # 0% maker on both legs
 
             events.append({
                 "event_id":    _make_eid(pair, "COMPLETE_RT", open_ms),
@@ -351,6 +402,121 @@ def process_pair_bars(pair: str, ps: dict, bars: list[dict], run_utc: str) -> li
     return events
 
 
+def _run_cohort_instance_on_bars(instance_id: str, ps: dict, completed: list[dict],
+                                  run_utc: str, spread_pct: float) -> list[dict]:
+    """Same init/new-bars/prev_close resolution as the main PAIRS loop in
+    cmd_run, factored out (not shared code with that loop, by design — the
+    original loop is left untouched) so cohort instruments can reuse one
+    fetched `completed` bar list across all 6 width-variants of a symbol.
+    `completed` bars are shared, read-mostly objects across those variants;
+    the only field written back onto them (prev_close) is deterministic from
+    the shared bar sequence itself, not from any instance's state, so this is
+    safe to call repeatedly on the same list for each of a symbol's variants.
+    """
+    pair_is_first_run = ps["last_processed_bar_open_ms"] is None
+
+    for i, bar in enumerate(completed):
+        if i == 0 and "prev_close" not in bar:
+            bar["prev_close"] = ps["last_processed_bar_close"]
+        elif i > 0 and "prev_close" not in bar:
+            bar["prev_close"] = completed[i - 1]["close"]
+
+    if pair_is_first_run:
+        seed_bar = completed[-1]
+        ps["start_date_utc"] = run_utc
+        ps["last_processed_bar_open_ms"] = seed_bar["open_time_ms"]
+        ps["last_processed_bar_close"] = seed_bar["close"]
+        print(f"  [{instance_id}] INIT seed bar: {ms_to_utc(seed_bar['open_time_ms'])}  "
+              f"close={seed_bar['close']:.6f}  spread={spread_pct}%")
+        return []
+
+    last_ms = ps["last_processed_bar_open_ms"]
+    new_bars = [b for b in completed if b["open_time_ms"] > last_ms]
+    if not new_bars:
+        return []
+
+    first_new_ms = new_bars[0]["open_time_ms"]
+    prev_in_window = [b for b in completed if b["open_time_ms"] < first_new_ms]
+    if prev_in_window:
+        new_bars[0]["prev_close"] = prev_in_window[-1]["close"]
+    elif ps["last_processed_bar_close"] is not None:
+        new_bars[0]["prev_close"] = ps["last_processed_bar_close"]
+    else:
+        new_bars = new_bars[1:]
+        if not new_bars:
+            return []
+
+    for i in range(1, len(new_bars)):
+        if new_bars[i].get("prev_close") is None:
+            prev_in_completed = [b for b in completed if b["open_time_ms"] < new_bars[i]["open_time_ms"]]
+            if prev_in_completed:
+                new_bars[i]["prev_close"] = prev_in_completed[-1]["close"]
+
+    events = process_pair_bars(instance_id, ps, new_bars, run_utc, spread_pct=spread_pct)
+    for e in events:
+        et = e["event_type"]
+        if et.startswith("FILL"):
+            print(f"    [{instance_id}] FILL   {et:<12} price={e['fill_price']:.6f}")
+        elif et == "COMPLETE_RT":
+            print(f"    [{instance_id}] RT     COMPLETE  net={e['net_pct']:.4f}%  hold={e['hold_bars']}h")
+        elif et.startswith("FORCED"):
+            print(f"    [{instance_id}] CLOSE  {et:<20} net={e['net_pct']:.4f}%  hold={e['hold_bars']}h")
+    return events
+
+
+def cmd_run_cohorts(state: dict, run_utc: str, all_events: list[dict],
+                     pair_summaries: list[str]) -> None:
+    """Process all 42 cohort instances. Fetches klines ONCE per unique
+    underlying symbol (7 fetches, not 42) and fans that single fetch out to
+    each symbol's 6 width-variants — each variant still has its own isolated
+    `ps` dict (independent pending_bid/ask, totals, clock), so there is no
+    shared mutable state between instances despite the shared bar data.
+    Reads/writes only state["pairs"][<cohort instance_id>] — never touches
+    a bare-symbol key (e.g. "MINAUSDT") used by the original 7 pairs.
+    """
+    by_symbol: dict[str, list[str]] = {}
+    for instance_id, meta in COHORT_INSTRUMENTS.items():
+        by_symbol.setdefault(meta["symbol"], []).append(instance_id)
+
+    for symbol, instance_ids in by_symbol.items():
+        print(f"\n[{symbol} cohort] fetching klines (shared across "
+              f"{len(instance_ids)} width variants: {instance_ids})...")
+        anchors = [state["pairs"][iid]["last_processed_bar_open_ms"] for iid in instance_ids]
+        known_anchors = [a for a in anchors if a is not None]
+        since_ms = (min(known_anchors) - 3_600_000) if known_anchors else None
+        raw = fetch_klines(symbol, since_ms=since_ms)
+        if not raw:
+            for iid in instance_ids:
+                pair_summaries.append(f"{iid}: fetch error — skipped")
+            continue
+
+        completed = [raw_to_bar(k) for k in raw[:-1]]
+        if not completed:
+            for iid in instance_ids:
+                pair_summaries.append(f"{iid}: no completed bars")
+            continue
+
+        for instance_id in instance_ids:
+            ps = state["pairs"][instance_id]
+            if ps["suspended"]:
+                pair_summaries.append(f"{instance_id}: SUSPENDED")
+                continue
+            spread_pct = COHORT_INSTRUMENTS[instance_id]["spread_pct"]
+            events = _run_cohort_instance_on_bars(instance_id, ps, completed, run_utc, spread_pct)
+            all_events.extend(events)
+
+            t = ps["totals"]
+            n_rts = t["complete_rts"] + t["forced_closes"]
+            avg = t["realized_pnl_pct_sum"] / max(n_rts, 1)
+            if ps["last_processed_bar_open_ms"] == completed[-1]["open_time_ms"] and not events and n_rts == 0 and t["fills"] == 0:
+                pass  # first-run init already printed inline above
+            pair_summaries.append(
+                f"{instance_id}: fills={t['fills']} rt={t['complete_rts']} forced={t['forced_closes']} | "
+                f"avg_net={avg:.4f}%/RT  total_net={t['realized_pnl_pct_sum']:.4f}%"
+            )
+        time.sleep(0.3)
+
+
 # ── Commands ─────────────────────────────────────────────────────────────────
 
 def cmd_status(state: dict) -> None:
@@ -371,8 +537,8 @@ def cmd_status(state: dict) -> None:
 
 
 def cmd_suspend(state: dict, pair: str, dry_run: bool = False) -> None:
-    if pair not in PAIRS:
-        print(f"Unknown pair: {pair}. Valid: {PAIRS}")
+    if pair not in PAIRS and pair not in COHORT_INSTRUMENTS:
+        print(f"Unknown pair/instance: {pair}. Valid: {PAIRS + list(COHORT_INSTRUMENTS)}")
         return
     state["pairs"][pair]["suspended"] = True
     save_state(state, dry_run)
@@ -380,12 +546,34 @@ def cmd_suspend(state: dict, pair: str, dry_run: bool = False) -> None:
 
 
 def cmd_resume(state: dict, pair: str, dry_run: bool = False) -> None:
-    if pair not in PAIRS:
-        print(f"Unknown pair: {pair}. Valid: {PAIRS}")
+    if pair not in PAIRS and pair not in COHORT_INSTRUMENTS:
+        print(f"Unknown pair/instance: {pair}. Valid: {PAIRS + list(COHORT_INSTRUMENTS)}")
         return
     state["pairs"][pair]["suspended"] = False
     save_state(state, dry_run)
     print(f"{'[dry-run] ' if dry_run else ''}{pair} resumed.")
+
+
+def cmd_status_cohort(state: dict) -> None:
+    """Status for the 42 spread-width cohort instances only, grouped by
+    width — does not read or print anything from the original 7 PAIRS."""
+    print(f"\nSpread-Width Cohort Status — {now_utc()}")
+    print(f"  {len(COHORT_INSTRUMENTS)} instances = {len(COHORT_BASE_PAIRS)} pairs x {len(COHORT_WIDTH_GROUPS)} widths")
+    for width in COHORT_WIDTH_GROUPS:
+        label = "1.0% (fresh control)" if width == COHORT_FRESH_CONTROL_WIDTH else f"{width:.1f}%"
+        print(f"\n  ── {label} cohort ──")
+        for symbol in COHORT_BASE_PAIRS:
+            iid = cohort_instance_id(symbol, width)
+            ps = state["pairs"].get(iid)
+            if ps is None:
+                print(f"    {iid:<20} not yet initialised")
+                continue
+            t = ps["totals"]
+            suspended = " [SUSPENDED]" if ps["suspended"] else ""
+            note = f"  ⚠ {COHORT_NOTES[symbol]}" if symbol in COHORT_NOTES else ""
+            print(f"    {iid:<20} start={ps.get('start_date_utc') or 'not yet initialised':<22} "
+                  f"fills={t['fills']:>3} rt={t['complete_rts']:>3} forced={t['forced_closes']:>3} "
+                  f"net={t['realized_pnl_pct_sum']:.4f}%{suspended}{note}")
 
 
 def cmd_run(state: dict, dry_run: bool = False) -> None:
@@ -503,11 +691,23 @@ def cmd_run(state: dict, dry_run: bool = False) -> None:
         )
         time.sleep(0.3)
 
+    # ── Spread-width cohort (42 instances, separate keys, see above) ────────
+    cmd_run_cohorts(state, run_utc, all_events, pair_summaries)
+
     # ── Finalise ─────────────────────────────────────────────────────────────
     if state["meta"]["start_date_utc"] is None:
         state["meta"]["start_date_utc"] = run_utc  # earliest-ever run, for file-level display only
 
     state["meta"]["last_run_utc"] = run_utc
+    # Additive, read-only-by-convention metadata for the dashboard/report to
+    # resolve each cohort instance's symbol/width without importing this
+    # module. Never overlaps with the "pairs" keys used by the original 7.
+    state["cohort_meta"] = {
+        "base_pairs": COHORT_BASE_PAIRS,
+        "widths": COHORT_WIDTH_GROUPS,
+        "instruments": COHORT_INSTRUMENTS,
+        "notes": COHORT_NOTES,
+    }
     append_events(all_events, dry_run=dry_run)
     save_state(state, dry_run=dry_run)
 
@@ -526,14 +726,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="MEXC paper trade runner")
     parser.add_argument("--dry-run",  action="store_true", help="Preview; no writes")
     parser.add_argument("--status",   action="store_true", help="Print state; no API calls")
-    parser.add_argument("--suspend",  metavar="PAIR",      help="Suspend a pair (e.g. MINAUSDT)")
-    parser.add_argument("--resume",   metavar="PAIR",      help="Resume a suspended pair")
+    parser.add_argument("--status-cohort", action="store_true",
+                        help="Print the 42-instance spread-width cohort, grouped by width; no API calls")
+    parser.add_argument("--suspend",  metavar="PAIR",      help="Suspend a pair or cohort instance (e.g. MINAUSDT or MINAUSDT-0.5)")
+    parser.add_argument("--resume",   metavar="PAIR",      help="Resume a suspended pair or cohort instance")
     args = parser.parse_args()
 
     state = load_state()
 
     if args.status:
         cmd_status(state)
+    elif args.status_cohort:
+        cmd_status_cohort(state)
     elif args.suspend:
         cmd_suspend(state, args.suspend.upper(), dry_run=args.dry_run)
     elif args.resume:

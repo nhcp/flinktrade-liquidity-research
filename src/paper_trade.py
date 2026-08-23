@@ -88,6 +88,44 @@ COHORT_NOTES = {
                     "spreads (backtest finding, see docs/SPREAD_WIDTH_COHORT_2026-08-22.md)"),
 }
 
+# ── Hold/spread-width matrix cohort (forward-test, see docs/HOLD_SPREAD_MATRIX_2026-08-23.md) ──
+# 7 live pairs x 5 max-hold windows (1h/2h/3h/4h/6h) x 2 spread widths
+# (1.0%, 0.9%) = 70 instances, each with its own independent clock starting
+# today. Distinct keys ("SYMBOL-WIDTH-Nh", e.g. "MINAUSDT-1.0-3h") that never
+# collide with either the bare-symbol live-pair keys ("MINAUSDT") or the
+# spread-width cohort's keys ("MINAUSDT-0.9", "MINAUSDT-1.0-FRESH") above —
+# the "-Nh" suffix is what makes this cohort's keys distinct even where width
+# values overlap (0.9 and 1.0 are both reused here). Same NOTIONAL_USDT/fees
+# as every other instrument — only spread_pct and max_hold_bars vary per
+# instance in this cohort.
+HOLD_SPREAD_BASE_PAIRS = COHORT_BASE_PAIRS   # same 7 pairs
+HOLD_SPREAD_WIDTHS = [1.0, 0.9]
+HOLD_SPREAD_HOLDS = [1, 2, 3, 4, 6]          # hours == bars (1h klines)
+
+
+def hold_spread_instance_id(symbol: str, width: float, hold_bars: int) -> str:
+    return f"{symbol}-{width:.1f}-{hold_bars}h"
+
+
+def _build_hold_spread_instruments() -> dict:
+    """instance_id -> {'symbol', 'spread_pct', 'max_hold_bars', 'width_label', 'hold_label'}"""
+    out = {}
+    for symbol in HOLD_SPREAD_BASE_PAIRS:
+        for width in HOLD_SPREAD_WIDTHS:
+            for hold in HOLD_SPREAD_HOLDS:
+                iid = hold_spread_instance_id(symbol, width, hold)
+                out[iid] = {
+                    "symbol": symbol,
+                    "spread_pct": width,
+                    "max_hold_bars": hold,
+                    "width_label": f"{width:.1f}%",
+                    "hold_label": f"{hold}h",
+                }
+    return out
+
+
+HOLD_SPREAD_INSTRUMENTS = _build_hold_spread_instruments()   # 70 entries: 7 pairs x 2 widths x 5 holds
+
 EVENTS_HEADER = [
     "event_id", "run_utc", "pair", "event_type",
     "bar_open_ms", "bar_open_utc",
@@ -140,7 +178,8 @@ def _blank_state() -> dict:
             "last_run_utc": None,
         },
         "pairs": {pair: _blank_pair_state() for pair in PAIRS}
-                 | {iid: _blank_pair_state() for iid in COHORT_INSTRUMENTS},
+                 | {iid: _blank_pair_state() for iid in COHORT_INSTRUMENTS}
+                 | {iid: _blank_pair_state() for iid in HOLD_SPREAD_INSTRUMENTS},
     }
 
 
@@ -163,6 +202,13 @@ def load_state() -> dict:
         # instance keys (e.g. "MINAUSDT-0.5") are always distinct from the
         # bare-symbol keys (e.g. "MINAUSDT") used by the original 7 pairs.
         for instance_id in COHORT_INSTRUMENTS:
+            if instance_id not in pairs:
+                pairs[instance_id] = _blank_pair_state()
+        # Additive only, same guarantee as above: create blank state for any
+        # hold/spread-width matrix instance not yet seen. Never reads or
+        # writes a PAIRS entry or a spread-width-cohort entry — matrix keys
+        # (e.g. "MINAUSDT-1.0-3h") are always distinct from both.
+        for instance_id in HOLD_SPREAD_INSTRUMENTS:
             if instance_id not in pairs:
                 pairs[instance_id] = _blank_pair_state()
         return state
@@ -264,7 +310,8 @@ def _make_eid(pair: str, event_type: str, bar_open_ms: int) -> str:
 
 
 def process_pair_bars(pair: str, ps: dict, bars: list[dict], run_utc: str,
-                       spread_pct: float = SPREAD_PCT) -> list[dict]:
+                       spread_pct: float = SPREAD_PCT,
+                       max_hold_bars: int = MAX_HOLD_BARS) -> list[dict]:
     """
     Process a chronological sequence of new completed bars for one pair.
 
@@ -272,9 +319,11 @@ def process_pair_bars(pair: str, ps: dict, bars: list[dict], run_utc: str,
     Modifies ps (pair state) in-place.
     Returns list of event dicts to be appended to the events CSV.
 
-    spread_pct defaults to the global SPREAD_PCT (1.0%) — the original 7
-    pairs' call site below does not pass this, so their behavior is
-    unchanged. Cohort instruments pass their own width explicitly.
+    spread_pct defaults to the global SPREAD_PCT (1.0%) and max_hold_bars
+    defaults to the global MAX_HOLD_BARS (3) — the original 7 pairs' call
+    site below does not pass either, so their behavior is unchanged. The
+    spread-width cohort passes its own width explicitly (default hold).
+    The hold/spread-width matrix cohort passes both explicitly.
     """
     events: list[dict] = []
     spread_half = spread_pct / 200.0   # fraction, half-spread
@@ -293,7 +342,7 @@ def process_pair_bars(pair: str, ps: dict, bars: list[dict], run_utc: str,
             if pend is None:
                 continue
             bars_held = round((open_ms - pend["bar_open_ms"]) / 3_600_000)
-            if bars_held < MAX_HOLD_BARS:
+            if bars_held < max_hold_bars:
                 continue
 
             exit_px = bar["close"]
@@ -517,6 +566,122 @@ def cmd_run_cohorts(state: dict, run_utc: str, all_events: list[dict],
         time.sleep(0.3)
 
 
+def _run_hold_spread_instance_on_bars(instance_id: str, ps: dict, completed: list[dict],
+                                       run_utc: str, spread_pct: float,
+                                       max_hold_bars: int) -> list[dict]:
+    """Same init/new-bars/prev_close resolution as _run_cohort_instance_on_bars
+    (deliberately duplicated rather than shared, matching that function's own
+    stated rationale — keeps each cohort runner independently auditable and
+    leaves neither the original PAIRS loop nor the spread-width cohort loop
+    touched). `completed` bars are shared, read-mostly across a symbol's 10
+    width x hold variants; only `prev_close` is written back, deterministic
+    from the shared bar sequence, so reuse across variants is safe.
+    """
+    pair_is_first_run = ps["last_processed_bar_open_ms"] is None
+
+    for i, bar in enumerate(completed):
+        if i == 0 and "prev_close" not in bar:
+            bar["prev_close"] = ps["last_processed_bar_close"]
+        elif i > 0 and "prev_close" not in bar:
+            bar["prev_close"] = completed[i - 1]["close"]
+
+    if pair_is_first_run:
+        seed_bar = completed[-1]
+        ps["start_date_utc"] = run_utc
+        ps["last_processed_bar_open_ms"] = seed_bar["open_time_ms"]
+        ps["last_processed_bar_close"] = seed_bar["close"]
+        print(f"  [{instance_id}] INIT seed bar: {ms_to_utc(seed_bar['open_time_ms'])}  "
+              f"close={seed_bar['close']:.6f}  spread={spread_pct}%  max_hold={max_hold_bars}h")
+        return []
+
+    last_ms = ps["last_processed_bar_open_ms"]
+    new_bars = [b for b in completed if b["open_time_ms"] > last_ms]
+    if not new_bars:
+        return []
+
+    first_new_ms = new_bars[0]["open_time_ms"]
+    prev_in_window = [b for b in completed if b["open_time_ms"] < first_new_ms]
+    if prev_in_window:
+        new_bars[0]["prev_close"] = prev_in_window[-1]["close"]
+    elif ps["last_processed_bar_close"] is not None:
+        new_bars[0]["prev_close"] = ps["last_processed_bar_close"]
+    else:
+        new_bars = new_bars[1:]
+        if not new_bars:
+            return []
+
+    for i in range(1, len(new_bars)):
+        if new_bars[i].get("prev_close") is None:
+            prev_in_completed = [b for b in completed if b["open_time_ms"] < new_bars[i]["open_time_ms"]]
+            if prev_in_completed:
+                new_bars[i]["prev_close"] = prev_in_completed[-1]["close"]
+
+    events = process_pair_bars(instance_id, ps, new_bars, run_utc,
+                                spread_pct=spread_pct, max_hold_bars=max_hold_bars)
+    for e in events:
+        et = e["event_type"]
+        if et.startswith("FILL"):
+            print(f"    [{instance_id}] FILL   {et:<12} price={e['fill_price']:.6f}")
+        elif et == "COMPLETE_RT":
+            print(f"    [{instance_id}] RT     COMPLETE  net={e['net_pct']:.4f}%  hold={e['hold_bars']}h")
+        elif et.startswith("FORCED"):
+            print(f"    [{instance_id}] CLOSE  {et:<20} net={e['net_pct']:.4f}%  hold={e['hold_bars']}h")
+    return events
+
+
+def cmd_run_hold_spread_cohort(state: dict, run_utc: str, all_events: list[dict],
+                                pair_summaries: list[str]) -> None:
+    """Process all 70 hold/spread-width matrix instances. Fetches klines ONCE
+    per unique underlying symbol (7 fetches, not 70) and fans that single
+    fetch out to each symbol's 10 width x hold variants — each variant still
+    has its own isolated `ps` dict (independent pending_bid/ask, totals,
+    clock), so there is no shared mutable state between instances despite the
+    shared bar data. Reads/writes only state["pairs"][<matrix instance id>] —
+    never touches a bare-symbol key or a spread-width-cohort key.
+    """
+    by_symbol: dict[str, list[str]] = {}
+    for instance_id, meta in HOLD_SPREAD_INSTRUMENTS.items():
+        by_symbol.setdefault(meta["symbol"], []).append(instance_id)
+
+    for symbol, instance_ids in by_symbol.items():
+        print(f"\n[{symbol} hold/spread matrix] fetching klines (shared across "
+              f"{len(instance_ids)} width x hold variants)...")
+        anchors = [state["pairs"][iid]["last_processed_bar_open_ms"] for iid in instance_ids]
+        known_anchors = [a for a in anchors if a is not None]
+        since_ms = (min(known_anchors) - 3_600_000) if known_anchors else None
+        raw = fetch_klines(symbol, since_ms=since_ms)
+        if not raw:
+            for iid in instance_ids:
+                pair_summaries.append(f"{iid}: fetch error — skipped")
+            continue
+
+        completed = [raw_to_bar(k) for k in raw[:-1]]
+        if not completed:
+            for iid in instance_ids:
+                pair_summaries.append(f"{iid}: no completed bars")
+            continue
+
+        for instance_id in instance_ids:
+            ps = state["pairs"][instance_id]
+            if ps["suspended"]:
+                pair_summaries.append(f"{instance_id}: SUSPENDED")
+                continue
+            meta = HOLD_SPREAD_INSTRUMENTS[instance_id]
+            events = _run_hold_spread_instance_on_bars(
+                instance_id, ps, completed, run_utc,
+                spread_pct=meta["spread_pct"], max_hold_bars=meta["max_hold_bars"])
+            all_events.extend(events)
+
+            t = ps["totals"]
+            n_rts = t["complete_rts"] + t["forced_closes"]
+            avg = t["realized_pnl_pct_sum"] / max(n_rts, 1)
+            pair_summaries.append(
+                f"{instance_id}: fills={t['fills']} rt={t['complete_rts']} forced={t['forced_closes']} | "
+                f"avg_net={avg:.4f}%/RT  total_net={t['realized_pnl_pct_sum']:.4f}%"
+            )
+        time.sleep(0.3)
+
+
 # ── Commands ─────────────────────────────────────────────────────────────────
 
 def cmd_status(state: dict) -> None:
@@ -536,9 +701,28 @@ def cmd_status(state: dict) -> None:
               f"realized_sum={t['realized_pnl_pct_sum']:.4f}%")
 
 
+def _known_instance(pair: str) -> bool:
+    return pair in PAIRS or pair in COHORT_INSTRUMENTS or pair in HOLD_SPREAD_INSTRUMENTS
+
+
+def _resolve_instance_arg(raw: str) -> str:
+    """CLI --suspend/--resume args used to be blindly .upper()'d in main(),
+    harmless while every instance id was itself all-uppercase (the 7 live
+    pairs, and the spread-width cohort's "SYMBOL-0.9"/"SYMBOL-1.0-FRESH"
+    ids). The hold/spread-width matrix's "SYMBOL-1.0-3h" ids use a
+    lowercase-h suffix (matching this cohort's naming spec), so a blind
+    .upper() would turn a valid id into a non-existent "...-3H". Resolve
+    case-insensitively instead: exact match first, then all-upper fallback
+    for the older all-uppercase instance ids typed in lowercase.
+    """
+    if _known_instance(raw):
+        return raw
+    return raw.upper()
+
+
 def cmd_suspend(state: dict, pair: str, dry_run: bool = False) -> None:
-    if pair not in PAIRS and pair not in COHORT_INSTRUMENTS:
-        print(f"Unknown pair/instance: {pair}. Valid: {PAIRS + list(COHORT_INSTRUMENTS)}")
+    if not _known_instance(pair):
+        print(f"Unknown pair/instance: {pair}. Valid: {PAIRS + list(COHORT_INSTRUMENTS) + list(HOLD_SPREAD_INSTRUMENTS)}")
         return
     state["pairs"][pair]["suspended"] = True
     save_state(state, dry_run)
@@ -546,8 +730,8 @@ def cmd_suspend(state: dict, pair: str, dry_run: bool = False) -> None:
 
 
 def cmd_resume(state: dict, pair: str, dry_run: bool = False) -> None:
-    if pair not in PAIRS and pair not in COHORT_INSTRUMENTS:
-        print(f"Unknown pair/instance: {pair}. Valid: {PAIRS + list(COHORT_INSTRUMENTS)}")
+    if not _known_instance(pair):
+        print(f"Unknown pair/instance: {pair}. Valid: {PAIRS + list(COHORT_INSTRUMENTS) + list(HOLD_SPREAD_INSTRUMENTS)}")
         return
     state["pairs"][pair]["suspended"] = False
     save_state(state, dry_run)
@@ -574,6 +758,29 @@ def cmd_status_cohort(state: dict) -> None:
             print(f"    {iid:<20} start={ps.get('start_date_utc') or 'not yet initialised':<22} "
                   f"fills={t['fills']:>3} rt={t['complete_rts']:>3} forced={t['forced_closes']:>3} "
                   f"net={t['realized_pnl_pct_sum']:.4f}%{suspended}{note}")
+
+
+def cmd_status_hold_spread(state: dict) -> None:
+    """Status for the 70 hold/spread-width matrix instances only, grouped by
+    hold then width — does not read or print anything from the original 7
+    PAIRS or the 42-instance spread-width cohort."""
+    print(f"\nHold/Spread-Width Matrix Status — {now_utc()}")
+    print(f"  {len(HOLD_SPREAD_INSTRUMENTS)} instances = "
+          f"{len(HOLD_SPREAD_BASE_PAIRS)} pairs x {len(HOLD_SPREAD_HOLDS)} holds x {len(HOLD_SPREAD_WIDTHS)} widths")
+    for hold in HOLD_SPREAD_HOLDS:
+        for width in HOLD_SPREAD_WIDTHS:
+            print(f"\n  ── {hold}h hold / {width:.1f}% spread ──")
+            for symbol in HOLD_SPREAD_BASE_PAIRS:
+                iid = hold_spread_instance_id(symbol, width, hold)
+                ps = state["pairs"].get(iid)
+                if ps is None:
+                    print(f"    {iid:<20} not yet initialised")
+                    continue
+                t = ps["totals"]
+                suspended = " [SUSPENDED]" if ps["suspended"] else ""
+                print(f"    {iid:<20} start={ps.get('start_date_utc') or 'not yet initialised':<22} "
+                      f"fills={t['fills']:>3} rt={t['complete_rts']:>3} forced={t['forced_closes']:>3} "
+                      f"net={t['realized_pnl_pct_sum']:.4f}%{suspended}")
 
 
 def cmd_run(state: dict, dry_run: bool = False) -> None:
@@ -694,6 +901,9 @@ def cmd_run(state: dict, dry_run: bool = False) -> None:
     # ── Spread-width cohort (42 instances, separate keys, see above) ────────
     cmd_run_cohorts(state, run_utc, all_events, pair_summaries)
 
+    # ── Hold/spread-width matrix cohort (70 instances, separate keys) ───────
+    cmd_run_hold_spread_cohort(state, run_utc, all_events, pair_summaries)
+
     # ── Finalise ─────────────────────────────────────────────────────────────
     if state["meta"]["start_date_utc"] is None:
         state["meta"]["start_date_utc"] = run_utc  # earliest-ever run, for file-level display only
@@ -707,6 +917,14 @@ def cmd_run(state: dict, dry_run: bool = False) -> None:
         "widths": COHORT_WIDTH_GROUPS,
         "instruments": COHORT_INSTRUMENTS,
         "notes": COHORT_NOTES,
+    }
+    # Same convention for the hold/spread-width matrix cohort. Never overlaps
+    # with "pairs" keys used by the original 7 or the spread-width cohort.
+    state["hold_spread_meta"] = {
+        "base_pairs": HOLD_SPREAD_BASE_PAIRS,
+        "widths": HOLD_SPREAD_WIDTHS,
+        "holds": HOLD_SPREAD_HOLDS,
+        "instruments": HOLD_SPREAD_INSTRUMENTS,
     }
     append_events(all_events, dry_run=dry_run)
     save_state(state, dry_run=dry_run)
@@ -728,7 +946,9 @@ def main() -> None:
     parser.add_argument("--status",   action="store_true", help="Print state; no API calls")
     parser.add_argument("--status-cohort", action="store_true",
                         help="Print the 42-instance spread-width cohort, grouped by width; no API calls")
-    parser.add_argument("--suspend",  metavar="PAIR",      help="Suspend a pair or cohort instance (e.g. MINAUSDT or MINAUSDT-0.5)")
+    parser.add_argument("--status-hold-spread", action="store_true",
+                        help="Print the 70-instance hold/spread-width matrix cohort, grouped by hold+width; no API calls")
+    parser.add_argument("--suspend",  metavar="PAIR",      help="Suspend a pair or cohort instance (e.g. MINAUSDT, MINAUSDT-0.5, or MINAUSDT-1.0-3h)")
     parser.add_argument("--resume",   metavar="PAIR",      help="Resume a suspended pair or cohort instance")
     args = parser.parse_args()
 
@@ -738,10 +958,12 @@ def main() -> None:
         cmd_status(state)
     elif args.status_cohort:
         cmd_status_cohort(state)
+    elif args.status_hold_spread:
+        cmd_status_hold_spread(state)
     elif args.suspend:
-        cmd_suspend(state, args.suspend.upper(), dry_run=args.dry_run)
+        cmd_suspend(state, _resolve_instance_arg(args.suspend), dry_run=args.dry_run)
     elif args.resume:
-        cmd_resume(state, args.resume.upper(), dry_run=args.dry_run)
+        cmd_resume(state, _resolve_instance_arg(args.resume), dry_run=args.dry_run)
     else:
         cmd_run(state, dry_run=args.dry_run)
 

@@ -557,6 +557,94 @@ relayed widescreen claim was not taken at face value for any of them. See
 PAPER_TRADE.md for each pair's paper-trade setup and independent 30-day
 decision clock, and `docs/HANDOFF_XPRUSDT.md`, `docs/HANDOFF_PIPPINUSDT.md`,
 `docs/HANDOFF_SUSDT.md` for the full onboarding records. KAVAUSDT remains
-excluded (already suspended); CSPRUSDT and NILUSDT remain excluded per the
-external screen's own KILL verdict on both — neither is added to `PAIRS` in
-any script, and neither is added to the flinktrade.com dashboard.
+excluded (already suspended); CSPRUSDT remains excluded per the external
+screen's own KILL verdict — not re-evaluated here. **NILUSDT's KILL verdict
+above was overturned on retest — see "Results — NILUSDT (verdict reversal)"
+below.**
+
+---
+
+## Results — NILUSDT (verdict reversal)
+
+**Original verdict (recorded above, "Results — XPRUSDT / PIPPINUSDT / SUSDT
+Evaluated"):** the external widescreen relay flagged NILUSDT (alongside
+CSPRUSDT) as a "tension case" and verdicted it **KILL**. That relay's own
+supporting artifact — pool counts, seed-level detail, the specific numbers
+behind the KILL call — was never available in this repo (same
+unreproducibility noted for every widescreen relay in this file). Reported
+separately (outside this repo) as the reason for the original KILL: the
+result was a **1-seed-of-30 statistical fluke** — i.e. it failed on only one
+Monte-Carlo seed out of thirty sampled, not a majority. A retest at higher
+seed counts (n=50/100/200/300) reportedly reconfirmed a real PASS at a
+12–19.5pp margin, stable across all four larger samples. **That retest, like
+the original KILL, is external to this repo and was not independently
+reproducible here** — no seed-level artifact for either the original KILL or
+the retest exists in this repo, this host's filesystem, or its shell history
+(checked by search before writing this section).
+
+**Per this repo's standing practice (identical to every pair above), neither
+the original KILL nor the retest PASS was taken at face value.** The only
+basis for reversing the verdict and onboarding NIL here is this repo's own
+independent reconciliation below.
+
+**Reconciliation methodology (identical to SFP/XYO/ETHW/GOAT/XPR/PIPPIN/S):**
+fresh `data_fetch.py` → `simulator.py` → `analytics.py` run against real MEXC
+1h klines, 2026-08-02 to 2026-08-23 (20.8 days), at this repo's actual flat
+1.0% spread / $50 notional convention — the same global constants used for
+every other pair, not per-pair tuned.
+
+| Criterion | Threshold | Result |
+|---|---|---|
+| G1: Total fills | ≥ 5 | 567 ✓ |
+| G2: Net/complete RT | > 0.10% | +1.0000% ✓ |
+| G3: Fill-adj monthly | > 0 | +112.4609% ✓ |
+| G4: AS at t+1h | > -0.15% | -0.1394% PASS ✓ |
+| G5: AS at t+4h | > -0.30% | -0.1650% PASS ✓ |
+| G6: Sharpe | ≥ 0.3 | 10.931 ✓ |
+| DQ: Forced-close rate | ≤ 95% | 2.5% ✓ |
+| **OVERALL** | **All 6** | **6/6 PASS** |
+
+Bid-fill AS@1h = -0.0032% (n=283), ask-fill AS@1h = **-0.2752%** (n=284).
+
+**Watch items — two, both more severe than anything seen in the pool to
+date, flagged rather than silently passed:**
+
+1. **G4 margin is the thinnest of any pair reconciled so far.** -0.1394%
+   clears the -0.15% threshold by only 0.0106pp — for comparison, every other
+   pair's overall (blended) G4 margin has cleared by at least several
+   hundredths of a percent with more room (MINA -0.0202%, KAVA +0.0546%, SFP
+   +0.0018%, XYO +0.1083%, GOAT +0.0206%, XPR +0.2683%, PIPPIN -0.0831%, S
+   -0.0864%). This is a razor's-edge pass, not a comfortable one.
+2. **Ask-fill AS@1h (-0.2752%) would fail G4 on its own** if the ask side
+   were gated separately (threshold -0.15%) — it does not, since G4 is
+   measured on the blended mean, and the bid side is flat-to-clean
+   (-0.0032%), pulling the blend inside bounds. This is the same kind of
+   bid/ask split MINA's original registration flagged as a borderline note
+   (bid-only -0.1564% vs -0.15%) — here the asymmetry is on the ask side and
+   larger in magnitude.
+3. **Forced-close severity is the worst in the pool by a wide margin.** Mean
+   net/forced-close = **-4.2899%**, roughly 4x worse than the next-worst pair
+   (PIPPIN, -1.1084%) and ~6-20x worse than every other pair (MINA -0.28%,
+   KAVA -0.21%, SFP -0.30%, XYO -0.21%, GOAT -0.5043%, XPR +0.1003%, S
+   -0.6850%; ETHW's rejected -0.71% is also well inside this). G3 still
+   clears decisively (+112.4609%, the largest monthly margin of any pair to
+   date) only because NIL's forced-close *rate* is the lowest in the pool
+   (2.5% of fill events, 14 forced closes vs. 276 complete RTs) — the same
+   rate-dilutes-severity mechanism that let GOAT's and PIPPIN's G3 clear
+   despite elevated forced-close losses, but here the per-forced-close
+   number itself is far outside anything seen before. If NIL's forced-close
+   rate rises even modestly during live paper trading, this severity would
+   start to bite the monthly figure much harder than it does for any other
+   pair.
+
+None of these trip a disqualifying condition: AS@t+1h (-0.1394%, and even the
+ask-only -0.2752%) stays well clear of the -0.50%×spread DQ bound, and the
+2.5% forced-close rate is nowhere near the 95% DQ bound. All 6 gate criteria
+pass on today's registered run.
+
+**Verdict: PROCEED to paper trade**, reversing the original external KILL —
+but flagged with the three loudest watch items of any pair onboarded in this
+repo to date. This is the least comfortable pass registered here; weekly
+monitoring should watch G4 margin drift and forced-close rate/severity first.
+
+Full onboarding record: `docs/HANDOFF_NILUSDT.md`.

@@ -4,6 +4,7 @@
 ## XYO started: 2026-08-20 | Target end: 2026-09-19 (independent clock — see Status Update below)
 ## GOAT started: 2026-08-21 | Target end: 2026-09-20 (independent clock — see Status Update below)
 ## XPR/PIPPIN/S started: 2026-08-21 | Target end: 2026-09-20 (independent clocks — see Status Update below)
+## NIL started: 2026-08-23 | Target end: 2026-09-22 (independent clock, verdict reversal — see Status Update below)
 
 **Purpose:** Validate MINA/USDT and KAVA/USDT backtest results against real
 MEXC kline data before any capital allocation. Both pairs passed the 6/6
@@ -271,6 +272,57 @@ Full onboarding records: `docs/HANDOFF_XPRUSDT.md`, `docs/HANDOFF_PIPPINUSDT.md`
 
 ---
 
+## Status Update — 2026-08-23: NILUSDT added (verdict reversal)
+
+**NILUSDT joined this paper trade on 2026-08-23**, reversing its own original
+verdict. NIL was previously KILLed by the same external "widescreen" relay
+covered above (2026-08-21 status update), alongside CSPRUSDT, both flagged as
+"tension cases." Reported separately (outside this repo, unverifiable here)
+as the reason: the original KILL was a **1-seed-of-30 statistical fluke**,
+and a retest at higher seed counts (n=50/100/200/300) reportedly reconfirmed
+a real PASS at a 12–19.5pp margin, stable across all four larger samples. As
+with the original KILL, **no artifact of that retest exists anywhere in this
+repo, this host's filesystem, or its shell history** — neither claim was
+taken at face value, per this repo's standing practice for every relay above.
+
+**This repo's own reconciliation** (same `data_fetch.py` → `simulator.py` →
+`analytics.py` pipeline, flat 1.0% spread, fresh MEXC 1h klines, 2026-08-02
+to 2026-08-23, 20.8 days) is what actually decided this reversal. NIL
+independently reconciles to a **6/6 gate pass** — 567 fills, blended AS
+in-bounds at both horizons (-0.1394% @1h, -0.1650% @4h), Sharpe 10.931 — but
+with the three loudest watch items logged for any pair added to this repo:
+
+1. **G4 margin is the thinnest on record** — clears the -0.15% threshold by
+   only 0.0106pp.
+2. **Ask-fill AS@1h (-0.2752%) would fail G4 in isolation** — the bid side
+   (-0.0032%) is what pulls the blended mean inside bounds.
+3. **Mean net/forced-close (-4.2899%) is the worst in the pool**, ~4x worse
+   than the next-worst pair (PIPPIN, -1.1084%); G3 still clears decisively
+   (+112.4609%/month, the largest margin of any pair to date) only because
+   NIL's forced-close rate is the lowest in the pool (2.5%).
+
+None of these trip a disqualifying condition. Full detail: GATE.md "Results —
+NILUSDT (verdict reversal)".
+
+CSPRUSDT is **not** part of this reversal — its own retest artifact, if one
+exists, was not presented with this task, and it remains excluded pending a
+separate independent re-gate.
+
+NIL is paper-traded at the same flat 1.0% spread and $50/fill notional as
+every other pair — single global constants in `paper_trade.py` /
+`paper_report.py`, no per-pair tuning.
+
+**NIL runs on its own independent 30-day clock**, started 2026-08-23 (its own
+first paper-trade run, seed bar 2026-08-23T11:00:00Z, first trading bar
+2026-08-23T12:00:00Z, `start_date_utc` 2026-08-23T12:13:55Z), decision date
+**2026-09-22** — tracked separately from every other pair's decision date.
+Adding NIL did not touch any other pair's `start_date_utc` or live totals
+(verified via `--dry-run`/`--status` before and after).
+
+Full onboarding record: `docs/HANDOFF_NILUSDT.md`.
+
+---
+
 ## What This Is (and Is Not)
 
 **What it is:** A live replay of the backtest strategy using MEXC's public
@@ -360,7 +412,8 @@ clock (MINA/KAVA weekly boundaries land on 2026-08-21/28, 2026-09-04; SFP's land
 one day later: 2026-08-22/29, 2026-09-05; XYO's land 2026-08-27, 2026-09-03,
 2026-09-10; GOAT's land 2026-08-28, 2026-09-04, 2026-09-11; XPR/PIPPIN/S's land
 2026-08-28, 2026-09-04, 2026-09-11 — same as GOAT's since they share a start date,
-but each pair's clock is independently tracked).
+but each pair's clock is independently tracked; NIL's land 2026-08-30, 2026-09-06,
+2026-09-13).
 
 ### MINA-specific monitoring
 
@@ -495,6 +548,32 @@ Because S's G3 margin is the thinnest of any pair added in this batch, weekly
 checks should watch both the forced-close guardrail and any drop in
 complete-RT volume — either alone eroding further could flip G3 negative
 faster here than for XPR or PIPPIN.
+
+### NIL-specific monitoring
+
+NIL's registered gate run (2026-08-23, see GATE.md "Results — NILUSDT
+(verdict reversal)") passed 6/6 but with the loudest watch items of any pair
+onboarded here: a G4 margin of only 0.0106pp above the -0.15% threshold (the
+thinnest on record), an ask-fill AS@1h of -0.2752% that would fail G4 on its
+own if gated separately, and a mean net/forced-close of -4.2899% — the worst
+in the pool by roughly 4x, kept from sinking G3 only because NIL's
+forced-close rate (2.5%) is the lowest of any pair.
+
+**Stop condition:** same as the other pairs — if NIL bid-fill or blended AS
+at t+1h drops below -0.50%, suspend immediately:
+
+```bash
+python src/paper_trade.py --suspend NILUSDT
+```
+
+Because NIL's G4 margin is razor-thin and its forced-close severity is
+unprecedented in this pool, weekly checks should prioritize NIL first among
+active pairs: any further AS drift at t+1h risks a DQ-level breach faster
+than for any other pair, and any rise in forced-close rate (even a small one,
+given how severe each forced close is) could flip G3 negative quickly. This
+pair should not be treated as a routine addition — it is being watched more
+closely than any other pair in this file given the reversed verdict and the
+severity of its watch items.
 
 ---
 
@@ -894,5 +973,46 @@ were untouched.
 ---
 
 ## Final Verdict — S (2026-09-20)
+
+*TBD*
+
+---
+
+## Results — NIL (weekly append, independent clock)
+
+### Week 1 — 2026-08-23 to 2026-08-30
+
+**2026-08-23:** NILUSDT initialised (seed bar 2026-08-23T11:00:00Z, first
+trading bar 2026-08-23T12:00:00Z). Registered gate re-run at this repo's flat
+1.0% spread: 6/6 pass, 567 fills, blended AS in-bounds at t+1h and t+4h — see
+GATE.md "Results — NILUSDT (verdict reversal)" and `docs/HANDOFF_NILUSDT.md`.
+This is a **verdict reversal** — NIL was previously KILLed by an external
+relay (2026-08-21 status update, alongside CSPRUSDT), reportedly on a
+1-seed-of-30 statistical fluke, and reportedly retested clean at higher seed
+counts; neither claim is independently reproducible from this repo, and
+onboarding here rests solely on this repo's own reconciliation. Watch items
+logged at registration, the loudest of any pair added so far: G4 margin only
+0.0106pp above threshold, ask-fill AS@1h (-0.2752%) that would fail G4 in
+isolation, and mean net/forced-close of -4.2899% (worst in the pool by ~4x).
+Verified via `--dry-run`/`--status` before and after that every other pair's
+`start_date_utc` and live totals were untouched.
+
+*Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
+
+### Week 2 — 2026-08-30 to 2026-09-06
+
+*TBD*
+
+### Week 3 — 2026-09-06 to 2026-09-13
+
+*TBD*
+
+### Week 4 — 2026-09-13 to 2026-09-22
+
+*TBD*
+
+---
+
+## Final Verdict — NIL (2026-09-22)
 
 *TBD*

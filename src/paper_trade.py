@@ -126,6 +126,46 @@ def _build_hold_spread_instruments() -> dict:
 
 HOLD_SPREAD_INSTRUMENTS = _build_hold_spread_instruments()   # 70 entries: 7 pairs x 2 widths x 5 holds
 
+# ── NILUSDT-only spread-width cohort (forward-test, see
+#    docs/NILUSDT_SPREAD_WIDTH_COHORT_2026-08-23.md) ──
+# NIL was not part of the original 7-pair spread-width cohort above (it
+# joined live paper trade later — see docs/HANDOFF_NILUSDT.md, added
+# 2026-08-23 — after that cohort was already running). This is NIL's own,
+# clearly separate 6-instance forward test: same widths (0.5-0.9% + a fresh
+# 1.0% control), same instance-key convention (cohort_instance_id, reused
+# as-is — "NILUSDT-0.5" ... "NILUSDT-1.0-FRESH"), same mechanics, but its
+# own dict/keys/run function so the 7-pair cohort's code and data are never
+# touched by this addition.
+NIL_SPREAD_COHORT_SYMBOL = "NILUSDT"
+NIL_SPREAD_COHORT_INSTRUMENTS = {
+    cohort_instance_id(NIL_SPREAD_COHORT_SYMBOL, width): {
+        "symbol": NIL_SPREAD_COHORT_SYMBOL,
+        "spread_pct": width,
+        "width_label": ("1.0% (fresh control)" if width == COHORT_FRESH_CONTROL_WIDTH
+                         else f"{width:.1f}%"),
+    }
+    for width in COHORT_WIDTHS + [COHORT_FRESH_CONTROL_WIDTH]
+}
+
+# ── NILUSDT-only hold/spread-width matrix cohort (forward-test, see
+#    docs/NILUSDT_HOLD_SPREAD_MATRIX_2026-08-23.md) ──
+# Same rationale as above: NIL was not part of the 70-instance 7-pair
+# hold/spread matrix. NIL's own 10-instance version (5 holds x 2 widths),
+# same instance-key convention (hold_spread_instance_id, reused as-is —
+# "NILUSDT-1.0-3h" etc.), own dict/keys/run function, isolated from the
+# 70-instance matrix's code and data.
+NIL_HOLD_SPREAD_INSTRUMENTS = {
+    hold_spread_instance_id(NIL_SPREAD_COHORT_SYMBOL, width, hold): {
+        "symbol": NIL_SPREAD_COHORT_SYMBOL,
+        "spread_pct": width,
+        "max_hold_bars": hold,
+        "width_label": f"{width:.1f}%",
+        "hold_label": f"{hold}h",
+    }
+    for width in HOLD_SPREAD_WIDTHS
+    for hold in HOLD_SPREAD_HOLDS
+}
+
 EVENTS_HEADER = [
     "event_id", "run_utc", "pair", "event_type",
     "bar_open_ms", "bar_open_utc",
@@ -179,7 +219,9 @@ def _blank_state() -> dict:
         },
         "pairs": {pair: _blank_pair_state() for pair in PAIRS}
                  | {iid: _blank_pair_state() for iid in COHORT_INSTRUMENTS}
-                 | {iid: _blank_pair_state() for iid in HOLD_SPREAD_INSTRUMENTS},
+                 | {iid: _blank_pair_state() for iid in HOLD_SPREAD_INSTRUMENTS}
+                 | {iid: _blank_pair_state() for iid in NIL_SPREAD_COHORT_INSTRUMENTS}
+                 | {iid: _blank_pair_state() for iid in NIL_HOLD_SPREAD_INSTRUMENTS},
     }
 
 
@@ -209,6 +251,19 @@ def load_state() -> dict:
         # writes a PAIRS entry or a spread-width-cohort entry — matrix keys
         # (e.g. "MINAUSDT-1.0-3h") are always distinct from both.
         for instance_id in HOLD_SPREAD_INSTRUMENTS:
+            if instance_id not in pairs:
+                pairs[instance_id] = _blank_pair_state()
+        # Additive only, same guarantee as above: create blank state for any
+        # NIL-only spread-width cohort instance not yet seen. Never reads or
+        # writes any other entry — NIL cohort keys (e.g. "NILUSDT-0.5") share
+        # the same naming convention as the 7-pair cohort's keys but only
+        # exist here because NIL is not among COHORT_BASE_PAIRS, so there is
+        # no collision.
+        for instance_id in NIL_SPREAD_COHORT_INSTRUMENTS:
+            if instance_id not in pairs:
+                pairs[instance_id] = _blank_pair_state()
+        # Additive only, same guarantee: NIL-only hold/spread-width matrix.
+        for instance_id in NIL_HOLD_SPREAD_INSTRUMENTS:
             if instance_id not in pairs:
                 pairs[instance_id] = _blank_pair_state()
         return state
@@ -682,6 +737,97 @@ def cmd_run_hold_spread_cohort(state: dict, run_utc: str, all_events: list[dict]
         time.sleep(0.3)
 
 
+def cmd_run_nil_spread_cohort(state: dict, run_utc: str, all_events: list[dict],
+                               pair_summaries: list[str]) -> None:
+    """Process NILUSDT's own 6-instance spread-width cohort. One kline fetch
+    (NILUSDT only) fanned out to all 6 width variants, each with its own
+    isolated `ps` dict. Reads/writes only state["pairs"][<NIL cohort id>] —
+    never touches the bare "NILUSDT" live-pair key, the 7-pair cohort's keys,
+    or the 70-instance matrix's keys.
+    """
+    instance_ids = list(NIL_SPREAD_COHORT_INSTRUMENTS.keys())
+    print(f"\n[NILUSDT spread-width cohort] fetching klines (shared across "
+          f"{len(instance_ids)} width variants: {instance_ids})...")
+    anchors = [state["pairs"][iid]["last_processed_bar_open_ms"] for iid in instance_ids]
+    known_anchors = [a for a in anchors if a is not None]
+    since_ms = (min(known_anchors) - 3_600_000) if known_anchors else None
+    raw = fetch_klines(NIL_SPREAD_COHORT_SYMBOL, since_ms=since_ms)
+    if not raw:
+        for iid in instance_ids:
+            pair_summaries.append(f"{iid}: fetch error — skipped")
+        return
+
+    completed = [raw_to_bar(k) for k in raw[:-1]]
+    if not completed:
+        for iid in instance_ids:
+            pair_summaries.append(f"{iid}: no completed bars")
+        return
+
+    for instance_id in instance_ids:
+        ps = state["pairs"][instance_id]
+        if ps["suspended"]:
+            pair_summaries.append(f"{instance_id}: SUSPENDED")
+            continue
+        spread_pct = NIL_SPREAD_COHORT_INSTRUMENTS[instance_id]["spread_pct"]
+        events = _run_cohort_instance_on_bars(instance_id, ps, completed, run_utc, spread_pct)
+        all_events.extend(events)
+
+        t = ps["totals"]
+        n_rts = t["complete_rts"] + t["forced_closes"]
+        avg = t["realized_pnl_pct_sum"] / max(n_rts, 1)
+        pair_summaries.append(
+            f"{instance_id}: fills={t['fills']} rt={t['complete_rts']} forced={t['forced_closes']} | "
+            f"avg_net={avg:.4f}%/RT  total_net={t['realized_pnl_pct_sum']:.4f}%"
+        )
+
+
+def cmd_run_nil_hold_spread_cohort(state: dict, run_utc: str, all_events: list[dict],
+                                    pair_summaries: list[str]) -> None:
+    """Process NILUSDT's own 10-instance hold/spread-width matrix. One kline
+    fetch (NILUSDT only) fanned out to all 10 hold x width variants, each
+    with its own isolated `ps` dict. Reads/writes only
+    state["pairs"][<NIL matrix id>] — never touches the bare "NILUSDT"
+    live-pair key, the 7-pair 70-instance matrix's keys, or NIL's own
+    spread-width cohort keys above.
+    """
+    instance_ids = list(NIL_HOLD_SPREAD_INSTRUMENTS.keys())
+    print(f"\n[NILUSDT hold/spread matrix] fetching klines (shared across "
+          f"{len(instance_ids)} hold x width variants)...")
+    anchors = [state["pairs"][iid]["last_processed_bar_open_ms"] for iid in instance_ids]
+    known_anchors = [a for a in anchors if a is not None]
+    since_ms = (min(known_anchors) - 3_600_000) if known_anchors else None
+    raw = fetch_klines(NIL_SPREAD_COHORT_SYMBOL, since_ms=since_ms)
+    if not raw:
+        for iid in instance_ids:
+            pair_summaries.append(f"{iid}: fetch error — skipped")
+        return
+
+    completed = [raw_to_bar(k) for k in raw[:-1]]
+    if not completed:
+        for iid in instance_ids:
+            pair_summaries.append(f"{iid}: no completed bars")
+        return
+
+    for instance_id in instance_ids:
+        ps = state["pairs"][instance_id]
+        if ps["suspended"]:
+            pair_summaries.append(f"{instance_id}: SUSPENDED")
+            continue
+        meta = NIL_HOLD_SPREAD_INSTRUMENTS[instance_id]
+        events = _run_hold_spread_instance_on_bars(
+            instance_id, ps, completed, run_utc,
+            spread_pct=meta["spread_pct"], max_hold_bars=meta["max_hold_bars"])
+        all_events.extend(events)
+
+        t = ps["totals"]
+        n_rts = t["complete_rts"] + t["forced_closes"]
+        avg = t["realized_pnl_pct_sum"] / max(n_rts, 1)
+        pair_summaries.append(
+            f"{instance_id}: fills={t['fills']} rt={t['complete_rts']} forced={t['forced_closes']} | "
+            f"avg_net={avg:.4f}%/RT  total_net={t['realized_pnl_pct_sum']:.4f}%"
+        )
+
+
 # ── Commands ─────────────────────────────────────────────────────────────────
 
 def cmd_status(state: dict) -> None:
@@ -702,7 +848,13 @@ def cmd_status(state: dict) -> None:
 
 
 def _known_instance(pair: str) -> bool:
-    return pair in PAIRS or pair in COHORT_INSTRUMENTS or pair in HOLD_SPREAD_INSTRUMENTS
+    return (pair in PAIRS or pair in COHORT_INSTRUMENTS or pair in HOLD_SPREAD_INSTRUMENTS
+            or pair in NIL_SPREAD_COHORT_INSTRUMENTS or pair in NIL_HOLD_SPREAD_INSTRUMENTS)
+
+
+def _all_known_instance_ids() -> list:
+    return (PAIRS + list(COHORT_INSTRUMENTS) + list(HOLD_SPREAD_INSTRUMENTS)
+            + list(NIL_SPREAD_COHORT_INSTRUMENTS) + list(NIL_HOLD_SPREAD_INSTRUMENTS))
 
 
 def _resolve_instance_arg(raw: str) -> str:
@@ -722,7 +874,7 @@ def _resolve_instance_arg(raw: str) -> str:
 
 def cmd_suspend(state: dict, pair: str, dry_run: bool = False) -> None:
     if not _known_instance(pair):
-        print(f"Unknown pair/instance: {pair}. Valid: {PAIRS + list(COHORT_INSTRUMENTS) + list(HOLD_SPREAD_INSTRUMENTS)}")
+        print(f"Unknown pair/instance: {pair}. Valid: {_all_known_instance_ids()}")
         return
     state["pairs"][pair]["suspended"] = True
     save_state(state, dry_run)
@@ -731,7 +883,7 @@ def cmd_suspend(state: dict, pair: str, dry_run: bool = False) -> None:
 
 def cmd_resume(state: dict, pair: str, dry_run: bool = False) -> None:
     if not _known_instance(pair):
-        print(f"Unknown pair/instance: {pair}. Valid: {PAIRS + list(COHORT_INSTRUMENTS) + list(HOLD_SPREAD_INSTRUMENTS)}")
+        print(f"Unknown pair/instance: {pair}. Valid: {_all_known_instance_ids()}")
         return
     state["pairs"][pair]["suspended"] = False
     save_state(state, dry_run)
@@ -781,6 +933,46 @@ def cmd_status_hold_spread(state: dict) -> None:
                 print(f"    {iid:<20} start={ps.get('start_date_utc') or 'not yet initialised':<22} "
                       f"fills={t['fills']:>3} rt={t['complete_rts']:>3} forced={t['forced_closes']:>3} "
                       f"net={t['realized_pnl_pct_sum']:.4f}%{suspended}")
+
+
+def cmd_status_nil_cohort(state: dict) -> None:
+    """Status for NIL's own 6-instance spread-width cohort only — does not
+    read or print anything from the 7-pair cohort, the 70-instance matrix,
+    or the live NILUSDT pair."""
+    print(f"\nNILUSDT Spread-Width Cohort Status (separate from the 7-pair cohort) — {now_utc()}")
+    print(f"  {len(NIL_SPREAD_COHORT_INSTRUMENTS)} instances = 1 pair (NILUSDT) x "
+          f"{len(COHORT_WIDTHS) + 1} widths")
+    for iid, meta in NIL_SPREAD_COHORT_INSTRUMENTS.items():
+        ps = state["pairs"].get(iid)
+        if ps is None:
+            print(f"    {iid:<20} not yet initialised")
+            continue
+        t = ps["totals"]
+        suspended = " [SUSPENDED]" if ps["suspended"] else ""
+        print(f"    {iid:<20} {meta['width_label']:<22} start={ps.get('start_date_utc') or 'not yet initialised':<22} "
+              f"fills={t['fills']:>3} rt={t['complete_rts']:>3} forced={t['forced_closes']:>3} "
+              f"net={t['realized_pnl_pct_sum']:.4f}%{suspended}")
+
+
+def cmd_status_nil_hold_spread(state: dict) -> None:
+    """Status for NIL's own 10-instance hold/spread-width matrix only — does
+    not read or print anything from the 7-pair matrix, the spread-width
+    cohorts, or the live NILUSDT pair."""
+    print(f"\nNILUSDT Hold/Spread-Width Matrix Status (separate from the 7-pair matrix) — {now_utc()}")
+    print(f"  {len(NIL_HOLD_SPREAD_INSTRUMENTS)} instances = 1 pair (NILUSDT) x "
+          f"{len(HOLD_SPREAD_HOLDS)} holds x {len(HOLD_SPREAD_WIDTHS)} widths")
+    for hold in HOLD_SPREAD_HOLDS:
+        for width in HOLD_SPREAD_WIDTHS:
+            iid = hold_spread_instance_id(NIL_SPREAD_COHORT_SYMBOL, width, hold)
+            ps = state["pairs"].get(iid)
+            if ps is None:
+                print(f"    {iid:<20} not yet initialised")
+                continue
+            t = ps["totals"]
+            suspended = " [SUSPENDED]" if ps["suspended"] else ""
+            print(f"    {iid:<20} start={ps.get('start_date_utc') or 'not yet initialised':<22} "
+                  f"fills={t['fills']:>3} rt={t['complete_rts']:>3} forced={t['forced_closes']:>3} "
+                  f"net={t['realized_pnl_pct_sum']:.4f}%{suspended}")
 
 
 def cmd_run(state: dict, dry_run: bool = False) -> None:
@@ -904,6 +1096,12 @@ def cmd_run(state: dict, dry_run: bool = False) -> None:
     # ── Hold/spread-width matrix cohort (70 instances, separate keys) ───────
     cmd_run_hold_spread_cohort(state, run_utc, all_events, pair_summaries)
 
+    # ── NILUSDT-only spread-width cohort (6 instances, separate keys) ───────
+    cmd_run_nil_spread_cohort(state, run_utc, all_events, pair_summaries)
+
+    # ── NILUSDT-only hold/spread-width matrix (10 instances, separate keys) ──
+    cmd_run_nil_hold_spread_cohort(state, run_utc, all_events, pair_summaries)
+
     # ── Finalise ─────────────────────────────────────────────────────────────
     if state["meta"]["start_date_utc"] is None:
         state["meta"]["start_date_utc"] = run_utc  # earliest-ever run, for file-level display only
@@ -925,6 +1123,19 @@ def cmd_run(state: dict, dry_run: bool = False) -> None:
         "widths": HOLD_SPREAD_WIDTHS,
         "holds": HOLD_SPREAD_HOLDS,
         "instruments": HOLD_SPREAD_INSTRUMENTS,
+    }
+    # Same convention for NIL's own two cohorts — never overlaps with any key
+    # above (base_pairs is a single-element list, distinct dicts/instruments).
+    state["nil_spread_cohort_meta"] = {
+        "base_pairs": [NIL_SPREAD_COHORT_SYMBOL],
+        "widths": COHORT_WIDTH_GROUPS,
+        "instruments": NIL_SPREAD_COHORT_INSTRUMENTS,
+    }
+    state["nil_hold_spread_meta"] = {
+        "base_pairs": [NIL_SPREAD_COHORT_SYMBOL],
+        "widths": HOLD_SPREAD_WIDTHS,
+        "holds": HOLD_SPREAD_HOLDS,
+        "instruments": NIL_HOLD_SPREAD_INSTRUMENTS,
     }
     append_events(all_events, dry_run=dry_run)
     save_state(state, dry_run=dry_run)
@@ -948,6 +1159,10 @@ def main() -> None:
                         help="Print the 42-instance spread-width cohort, grouped by width; no API calls")
     parser.add_argument("--status-hold-spread", action="store_true",
                         help="Print the 70-instance hold/spread-width matrix cohort, grouped by hold+width; no API calls")
+    parser.add_argument("--status-nil-cohort", action="store_true",
+                        help="Print NILUSDT's own 6-instance spread-width cohort; no API calls")
+    parser.add_argument("--status-nil-hold-spread", action="store_true",
+                        help="Print NILUSDT's own 10-instance hold/spread-width matrix; no API calls")
     parser.add_argument("--suspend",  metavar="PAIR",      help="Suspend a pair or cohort instance (e.g. MINAUSDT, MINAUSDT-0.5, or MINAUSDT-1.0-3h)")
     parser.add_argument("--resume",   metavar="PAIR",      help="Resume a suspended pair or cohort instance")
     args = parser.parse_args()
@@ -960,6 +1175,10 @@ def main() -> None:
         cmd_status_cohort(state)
     elif args.status_hold_spread:
         cmd_status_hold_spread(state)
+    elif args.status_nil_cohort:
+        cmd_status_nil_cohort(state)
+    elif args.status_nil_hold_spread:
+        cmd_status_nil_hold_spread(state)
     elif args.suspend:
         cmd_suspend(state, _resolve_instance_arg(args.suspend), dry_run=args.dry_run)
     elif args.resume:

@@ -111,3 +111,27 @@ Follow-up to the 2026-08-20 Cost-model audit entry above, which flagged DCA Bot'
 | NILUSDT | 1 | -5.0474% | -5.0864% | -0.0390pp | 0 | 30 |
 
 **Action taken:** none — diagnostic only, `paper_trade_state.json` and `paper_trade_events.csv` untouched.
+
+---
+
+## 2026-08-25T19:51:55Z — Toxic-flow stress test, original 7 MEXC live pairs
+
+Full run of `src/toxic_flow_check.py` (see file docstring for method) across all seven original MEXC live pairs: MINAUSDT, SFPUSDT, XYOUSDT, GOATUSDT, XPRUSDT, PIPPINUSDT, SUSDT. Diagnostic-only — reads each pair's `data/<PAIR>_1h.csv`, does not touch `paper_trade_state.json`, `paper_trade_events.csv`, or any live pair's clock/state.
+
+**Method:** for each pair, inject a synthetic 2σ/3σ/5σ permanent price-level shock (from the pair's own realized bar-return std dev) at a random point (seed=42) in its historical bar series, then re-run this repo's own fill/fee simulation logic on the whole post-shock series and check whether aggregate fill-adjusted monthly P&L stays positive.
+
+| Pair | 2-sigma | 3-sigma | 5-sigma | Overall |
+|---|---|---|---|---|
+| MINAUSDT | PASS (25.35%/mo) | PASS (24.59%/mo) | PASS (22.54%/mo) | RESILIENT |
+| SFPUSDT | PASS (57.27%/mo) | PASS (59.32%/mo) | PASS (54.53%/mo) | RESILIENT |
+| XYOUSDT | PASS (79.98%/mo) | PASS (82.03%/mo) | PASS (81.31%/mo) | RESILIENT |
+| GOATUSDT | PASS (60.93%/mo) | PASS (63.93%/mo) | PASS (58.14%/mo) | RESILIENT |
+| XPRUSDT | PASS (78.15%/mo) | PASS (79.09%/mo) | PASS (79.96%/mo) | RESILIENT |
+| PIPPINUSDT | PASS (51.46%/mo) | PASS (51.46%/mo) | PASS (49.88%/mo) | RESILIENT |
+| SUSDT | PASS (13.34%/mo) | PASS (7.26%/mo) | PASS (14.90%/mo) | RESILIENT |
+
+Summary: 7/7 pairs stay fill-adjusted-P&L-positive across all three synthetic shock sizes.
+
+**Caveat:** this is a coarser proxy than a true "N round trips to recover" metric — a resilience signal, not a precise recovery-speed count (same caveat carried by the WEEX-repo version this was ported from). Bars are each pair's static `data/<PAIR>_1h.csv` pull from gate/onboarding time (mtimes span 2026-08-14 to 2026-08-21), not a fresh re-pull.
+
+**Action taken:** none — diagnostic only, `paper_trade_state.json` and `paper_trade_events.csv` untouched.

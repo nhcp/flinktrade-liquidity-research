@@ -7,3 +7,6 @@ logs/
 
 # Claude Code local settings
 .claude/
+
+# Python bytecode cache
+__pycache__/

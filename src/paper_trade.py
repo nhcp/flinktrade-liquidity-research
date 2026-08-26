@@ -38,11 +38,22 @@ import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
+from adjustment_model import estimate_pair_adjustment
+
 PAIRS = ["MINAUSDT", "KAVAUSDT", "SFPUSDT", "XYOUSDT", "GOATUSDT", "XPRUSDT", "PIPPINUSDT", "SUSDT", "NILUSDT"]
 BASE_URL = "https://api.mexc.com/api/v3/klines"
 DATA_DIR = Path(__file__).parent.parent / "data"
 STATE_FILE = DATA_DIR / "paper_trade_state.json"
 EVENTS_FILE = DATA_DIR / "paper_trade_events.csv"
+ADJUSTMENTS_FILE = DATA_DIR / "paper_trade_adjustments.csv"
+
+# ── Live-P&L adjustment wiring (depth-based slippage + fill-probability) ──
+# Scoped to exactly the 8 currently-live original pairs (KAVAUSDT excluded —
+# suspended 2026-08-15, dead). Deliberately NEVER touches any cohort /
+# hold-spread-matrix instance key — those stay on raw touch-rule P&L only,
+# unchanged. See adjustment_model.py for methodology and honest limitations
+# (fill-probability is a coarse proxy, not true queue position).
+ADJUSTMENT_LIVE_PAIRS = ["MINAUSDT", "SFPUSDT", "XYOUSDT", "GOATUSDT", "XPRUSDT", "PIPPINUSDT", "SUSDT", "NILUSDT"]
 
 SPREAD_PCT = 1.0          # total spread; half posted each side
 MAX_HOLD_BARS = 3         # hours before forced close
@@ -358,6 +369,195 @@ def append_events(events: list[dict], dry_run: bool = False) -> None:
             w.writerow(_event_row(e))
 
 
+# ── Adjustment audit trail (data/paper_trade_adjustments.csv) ───────────────
+# Separate, brand-new, append-only file — deliberately NOT a schema change to
+# the existing paper_trade_events.csv ledger (avoids any risk to that file's
+# parseability for the 300+ cohort instances and existing downstream readers
+# that don't know about adjustments). Joins back to events via event_id.
+
+ADJUSTMENTS_HEADER = [
+    "event_id", "run_utc", "pair", "event_type", "adjustment_type",
+    "orig_net_pct", "adj_net_pct",
+    "fill_prob_applied", "slippage_pct_applied",
+    "n_depth_snapshots", "confidence", "is_retroactive_seed",
+]
+
+
+def _ensure_adjustments_header() -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    if not ADJUSTMENTS_FILE.exists():
+        with open(ADJUSTMENTS_FILE, "w", newline="") as f:
+            csv.writer(f).writerow(ADJUSTMENTS_HEADER)
+
+
+def _adjustment_row(a: dict) -> list:
+    return [a.get(k, "") for k in ADJUSTMENTS_HEADER]
+
+
+def append_adjustments(rows: list[dict], dry_run: bool = False) -> None:
+    if not rows:
+        return
+    if dry_run:
+        for a in rows:
+            print(f"  [dry-run adj] {a['adjustment_type']:16s} {a['pair']}  "
+                  f"orig={a['orig_net_pct']}%  adj={a['adj_net_pct']}%  "
+                  f"({'seed' if a['is_retroactive_seed'] else 'live'})")
+        return
+    _ensure_adjustments_header()
+    with open(ADJUSTMENTS_FILE, "a", newline="") as f:
+        w = csv.writer(f)
+        for a in rows:
+            w.writerow(_adjustment_row(a))
+
+
+def _adjusted_event_value(event: dict, adj: dict) -> tuple[float, str, dict] | None:
+    """For one event dict from process_pair_bars(), returns
+    (adj_net_pct, adjustment_type, extra_fields) or None if this event type
+    carries no P&L to adjust (FILL_BID/FILL_ASK are entry-only, no net_pct)."""
+    et = event["event_type"]
+    orig_net = event.get("net_pct")
+    if orig_net is None:
+        return None
+
+    if et == "COMPLETE_RT":
+        fp = adj["fill_prob_complete"]
+        adj_net = round(orig_net * fp, 5)
+        return adj_net, "fill_probability", {"fill_prob_applied": fp, "slippage_pct_applied": ""}
+
+    if et in ("FORCED_CLOSE_BID", "FORCED_CLOSE_ASK"):
+        side = event["side"]
+        slip = adj["avg_bid_slip_pct"] if side == "bid" else adj["avg_ask_slip_pct"]
+        if slip is None:
+            return orig_net, "slippage", {"fill_prob_applied": "", "slippage_pct_applied": ""}
+        exit_price = event["exit_price"]
+        fill_price = event["fill_price"]
+        if side == "bid":
+            adj_exit = exit_price * (1 - slip)
+            gross = (adj_exit - fill_price) / fill_price
+        else:
+            adj_exit = exit_price * (1 + slip)
+            gross = (fill_price - adj_exit) / fill_price
+        adj_net = round(gross * 100 - TAKER_FEE * 100, 5)
+        return adj_net, "slippage", {"fill_prob_applied": "", "slippage_pct_applied": round(slip * 100, 5)}
+
+    return None
+
+
+def record_adjustment_model_snapshot(ps: dict, adj: dict, run_utc: str) -> None:
+    """Always-overwritten (not cumulative) record of the LATEST adjustment
+    estimate used, for dashboard/report transparency — this is what answers
+    'how much should I trust this pair's adjusted number right now.'"""
+    ps["adjustment_model"] = {
+        "last_computed_utc": run_utc,
+        "bid_slip_pct": round(adj["avg_bid_slip_pct"] * 100, 5) if adj["avg_bid_slip_pct"] is not None else None,
+        "ask_slip_pct": round(adj["avg_ask_slip_pct"] * 100, 5) if adj["avg_ask_slip_pct"] is not None else None,
+        "fill_prob_bid": adj["fill_prob_bid"],
+        "fill_prob_ask": adj["fill_prob_ask"],
+        "fill_prob_complete": adj["fill_prob_complete"],
+        "n_depth_snapshots": adj["n_snapshots"],
+        "confidence": adj["confidence"],
+    }
+
+
+def ensure_adjustment_seeded(pair: str, ps: dict, adj: dict, run_utc: str) -> list[dict]:
+    """One-time (idempotent) retroactive seed of ps['totals_adjusted'] from
+    this pair's full prior history in paper_trade_events.csv, using the
+    CURRENT adjustment estimate applied uniformly — same "current estimate
+    applied retroactively" approach as the original slippage_model.py
+    diagnostic (see KILL_LOG.md), now extended to also cover fill-probability
+    and wired into live state instead of being a side-channel report only.
+    No-ops on every call after the first for a given pair (idempotent)."""
+    if "totals_adjusted" in ps:
+        return []
+
+    rows = []
+    seeded_sum = 0.0
+    slip_component = 0.0
+    fp_component = 0.0
+    n_seeded = 0
+
+    if EVENTS_FILE.exists():
+        with open(EVENTS_FILE) as f:
+            for row in csv.DictReader(f):
+                if row["pair"] != pair:
+                    continue
+                if row["event_type"] not in ("COMPLETE_RT", "FORCED_CLOSE_BID", "FORCED_CLOSE_ASK"):
+                    continue
+                try:
+                    orig_net = float(row["net_pct"])
+                except (ValueError, KeyError):
+                    continue
+                pseudo_event = {
+                    "event_type": row["event_type"], "net_pct": orig_net,
+                    "side": row.get("side", ""),
+                    "exit_price": float(row["exit_price"]) if row.get("exit_price") else None,
+                    "fill_price": float(row["fill_price"]) if row.get("fill_price") else None,
+                }
+                result = _adjusted_event_value(pseudo_event, adj)
+                if result is None:
+                    continue
+                adj_net, adj_type, extra = result
+                seeded_sum += adj_net
+                if adj_type == "slippage":
+                    slip_component += (adj_net - orig_net)
+                else:
+                    fp_component += (adj_net - orig_net)
+                n_seeded += 1
+                rows.append({
+                    "event_id": row["event_id"], "run_utc": run_utc, "pair": pair,
+                    "event_type": row["event_type"], "adjustment_type": adj_type,
+                    "orig_net_pct": orig_net, "adj_net_pct": adj_net,
+                    "n_depth_snapshots": adj["n_snapshots"], "confidence": adj["confidence"],
+                    "is_retroactive_seed": True,
+                    **extra,
+                })
+
+    ps["totals_adjusted"] = {
+        "realized_pnl_pct_sum_adjusted": round(seeded_sum, 6),
+        "slippage_adjustment_pct_sum": round(slip_component, 6),
+        "fill_prob_adjustment_pct_sum": round(fp_component, 6),
+        "seeded_from_history_utc": run_utc,
+        "n_historical_events_seeded": n_seeded,
+    }
+    print(f"  [{pair}] ADJUSTMENT SEED: {n_seeded} historical events, "
+          f"raw sum vs adjusted sum delta captured (see paper_trade_adjustments.csv). "
+          f"Depth confidence: {adj['confidence']}")
+    return rows
+
+
+def apply_adjustments_to_new_events(pair: str, ps: dict, events: list[dict],
+                                     adj: dict, run_utc: str) -> list[dict]:
+    """Incrementally adjusts THIS run's new events on top of ps['totals_adjusted']
+    (already seeded/ensured present by ensure_adjustment_seeded before this is
+    called). Does not touch ps['totals'] (the raw figure) at all."""
+    rows = []
+    for event in events:
+        result = _adjusted_event_value(event, adj)
+        if result is None:
+            continue
+        adj_net, adj_type, extra = result
+        orig_net = event["net_pct"]
+
+        ps["totals_adjusted"]["realized_pnl_pct_sum_adjusted"] = round(
+            ps["totals_adjusted"]["realized_pnl_pct_sum_adjusted"] + adj_net, 6)
+        if adj_type == "slippage":
+            ps["totals_adjusted"]["slippage_adjustment_pct_sum"] = round(
+                ps["totals_adjusted"]["slippage_adjustment_pct_sum"] + (adj_net - orig_net), 6)
+        else:
+            ps["totals_adjusted"]["fill_prob_adjustment_pct_sum"] = round(
+                ps["totals_adjusted"]["fill_prob_adjustment_pct_sum"] + (adj_net - orig_net), 6)
+
+        rows.append({
+            "event_id": event["event_id"], "run_utc": run_utc, "pair": pair,
+            "event_type": event["event_type"], "adjustment_type": adj_type,
+            "orig_net_pct": orig_net, "adj_net_pct": adj_net,
+            "n_depth_snapshots": adj["n_snapshots"], "confidence": adj["confidence"],
+            "is_retroactive_seed": False,
+            **extra,
+        })
+    return rows
+
+
 # ── Core: process bars for one pair ─────────────────────────────────────────
 
 def _make_eid(pair: str, event_type: str, bar_open_ms: int) -> str:
@@ -569,7 +769,7 @@ def _run_cohort_instance_on_bars(instance_id: str, ps: dict, completed: list[dic
 
 
 def cmd_run_cohorts(state: dict, run_utc: str, all_events: list[dict],
-                     pair_summaries: list[str]) -> None:
+                     pair_summaries: list[str], all_adjustment_rows: list[dict]) -> None:
     """Process all 42 cohort instances. Fetches klines ONCE per unique
     underlying symbol (7 fetches, not 42) and fans that single fetch out to
     each symbol's 6 width-variants — each variant still has its own isolated
@@ -577,6 +777,16 @@ def cmd_run_cohorts(state: dict, run_utc: str, all_events: list[dict],
     shared mutable state between instances despite the shared bar data.
     Reads/writes only state["pairs"][<cohort instance_id>] — never touches
     a bare-symbol key (e.g. "MINAUSDT") used by the original 7 pairs.
+
+    Live-P&L adjustment (fill-probability + depth-slippage, see
+    adjustment_model.py) is applied the same way as for the 8 live pairs:
+    the depth/turnover estimate is computed once per underlying symbol
+    (depth_snapshots.csv and <PAIR>_1h.csv are keyed by symbol, not by
+    cohort instance — every width variant of a symbol shares the same
+    fill_prob/slippage numbers and depth confidence), then seeded/applied
+    per-instance via the existing ensure_adjustment_seeded /
+    apply_adjustments_to_new_events helpers (instance_id passed as `pair`
+    so each instance's own totals_adjusted and event history stay separate).
     """
     by_symbol: dict[str, list[str]] = {}
     for instance_id, meta in COHORT_INSTRUMENTS.items():
@@ -600,6 +810,8 @@ def cmd_run_cohorts(state: dict, run_utc: str, all_events: list[dict],
                 pair_summaries.append(f"{iid}: no completed bars")
             continue
 
+        adj = estimate_pair_adjustment(symbol)
+
         for instance_id in instance_ids:
             ps = state["pairs"][instance_id]
             if ps["suspended"]:
@@ -609,15 +821,27 @@ def cmd_run_cohorts(state: dict, run_utc: str, all_events: list[dict],
             events = _run_cohort_instance_on_bars(instance_id, ps, completed, run_utc, spread_pct)
             all_events.extend(events)
 
+            record_adjustment_model_snapshot(ps, adj, run_utc)
+            seed_rows = ensure_adjustment_seeded(instance_id, ps, adj, run_utc)
+            all_adjustment_rows.extend(seed_rows)
+            if events:
+                new_adj_rows = apply_adjustments_to_new_events(instance_id, ps, events, adj, run_utc)
+                all_adjustment_rows.extend(new_adj_rows)
+
             t = ps["totals"]
             n_rts = t["complete_rts"] + t["forced_closes"]
             avg = t["realized_pnl_pct_sum"] / max(n_rts, 1)
             if ps["last_processed_bar_open_ms"] == completed[-1]["open_time_ms"] and not events and n_rts == 0 and t["fills"] == 0:
                 pass  # first-run init already printed inline above
-            pair_summaries.append(
+            summary = (
                 f"{instance_id}: fills={t['fills']} rt={t['complete_rts']} forced={t['forced_closes']} | "
                 f"avg_net={avg:.4f}%/RT  total_net={t['realized_pnl_pct_sum']:.4f}%"
             )
+            if "totals_adjusted" in ps:
+                ta = ps["totals_adjusted"]
+                summary += (f"  | adjusted_net={ta['realized_pnl_pct_sum_adjusted']:.4f}% "
+                            f"[depth confidence: {adj['confidence']}]")
+            pair_summaries.append(summary)
         time.sleep(0.3)
 
 
@@ -685,7 +909,7 @@ def _run_hold_spread_instance_on_bars(instance_id: str, ps: dict, completed: lis
 
 
 def cmd_run_hold_spread_cohort(state: dict, run_utc: str, all_events: list[dict],
-                                pair_summaries: list[str]) -> None:
+                                pair_summaries: list[str], all_adjustment_rows: list[dict]) -> None:
     """Process all 70 hold/spread-width matrix instances. Fetches klines ONCE
     per unique underlying symbol (7 fetches, not 70) and fans that single
     fetch out to each symbol's 10 width x hold variants — each variant still
@@ -693,6 +917,12 @@ def cmd_run_hold_spread_cohort(state: dict, run_utc: str, all_events: list[dict]
     clock), so there is no shared mutable state between instances despite the
     shared bar data. Reads/writes only state["pairs"][<matrix instance id>] —
     never touches a bare-symbol key or a spread-width-cohort key.
+
+    Live-P&L adjustment applied the same way as cmd_run_cohorts (and the 8
+    live pairs): one depth/turnover estimate per underlying symbol (all 10
+    hold x width variants of a symbol share the same fill_prob/slippage/depth
+    confidence, since depth data doesn't vary by hold window or spread
+    width), seeded/applied per-instance via the existing helpers.
     """
     by_symbol: dict[str, list[str]] = {}
     for instance_id, meta in HOLD_SPREAD_INSTRUMENTS.items():
@@ -716,6 +946,8 @@ def cmd_run_hold_spread_cohort(state: dict, run_utc: str, all_events: list[dict]
                 pair_summaries.append(f"{iid}: no completed bars")
             continue
 
+        adj = estimate_pair_adjustment(symbol)
+
         for instance_id in instance_ids:
             ps = state["pairs"][instance_id]
             if ps["suspended"]:
@@ -727,23 +959,43 @@ def cmd_run_hold_spread_cohort(state: dict, run_utc: str, all_events: list[dict]
                 spread_pct=meta["spread_pct"], max_hold_bars=meta["max_hold_bars"])
             all_events.extend(events)
 
+            record_adjustment_model_snapshot(ps, adj, run_utc)
+            seed_rows = ensure_adjustment_seeded(instance_id, ps, adj, run_utc)
+            all_adjustment_rows.extend(seed_rows)
+            if events:
+                new_adj_rows = apply_adjustments_to_new_events(instance_id, ps, events, adj, run_utc)
+                all_adjustment_rows.extend(new_adj_rows)
+
             t = ps["totals"]
             n_rts = t["complete_rts"] + t["forced_closes"]
             avg = t["realized_pnl_pct_sum"] / max(n_rts, 1)
-            pair_summaries.append(
+            summary = (
                 f"{instance_id}: fills={t['fills']} rt={t['complete_rts']} forced={t['forced_closes']} | "
                 f"avg_net={avg:.4f}%/RT  total_net={t['realized_pnl_pct_sum']:.4f}%"
             )
+            if "totals_adjusted" in ps:
+                ta = ps["totals_adjusted"]
+                summary += (f"  | adjusted_net={ta['realized_pnl_pct_sum_adjusted']:.4f}% "
+                            f"[depth confidence: {adj['confidence']}]")
+            pair_summaries.append(summary)
         time.sleep(0.3)
 
 
 def cmd_run_nil_spread_cohort(state: dict, run_utc: str, all_events: list[dict],
-                               pair_summaries: list[str]) -> None:
+                               pair_summaries: list[str], all_adjustment_rows: list[dict],
+                               adj: dict) -> None:
     """Process NILUSDT's own 6-instance spread-width cohort. One kline fetch
     (NILUSDT only) fanned out to all 6 width variants, each with its own
     isolated `ps` dict. Reads/writes only state["pairs"][<NIL cohort id>] —
     never touches the bare "NILUSDT" live-pair key, the 7-pair cohort's keys,
     or the 70-instance matrix's keys.
+
+    Live-P&L adjustment applied the same way as cmd_run_cohorts/
+    cmd_run_hold_spread_cohort: `adj` is a single estimate_pair_adjustment
+    ("NILUSDT") result computed once by the caller and shared across this
+    cohort's 6 instances AND the 10-instance hold/spread matrix below (depth
+    data doesn't vary by spread width or hold window), seeded/applied
+    per-instance via the existing helpers.
     """
     instance_ids = list(NIL_SPREAD_COHORT_INSTRUMENTS.keys())
     print(f"\n[NILUSDT spread-width cohort] fetching klines (shared across "
@@ -772,23 +1024,42 @@ def cmd_run_nil_spread_cohort(state: dict, run_utc: str, all_events: list[dict],
         events = _run_cohort_instance_on_bars(instance_id, ps, completed, run_utc, spread_pct)
         all_events.extend(events)
 
+        record_adjustment_model_snapshot(ps, adj, run_utc)
+        seed_rows = ensure_adjustment_seeded(instance_id, ps, adj, run_utc)
+        all_adjustment_rows.extend(seed_rows)
+        if events:
+            new_adj_rows = apply_adjustments_to_new_events(instance_id, ps, events, adj, run_utc)
+            all_adjustment_rows.extend(new_adj_rows)
+
         t = ps["totals"]
         n_rts = t["complete_rts"] + t["forced_closes"]
         avg = t["realized_pnl_pct_sum"] / max(n_rts, 1)
-        pair_summaries.append(
+        summary = (
             f"{instance_id}: fills={t['fills']} rt={t['complete_rts']} forced={t['forced_closes']} | "
             f"avg_net={avg:.4f}%/RT  total_net={t['realized_pnl_pct_sum']:.4f}%"
         )
+        if "totals_adjusted" in ps:
+            ta = ps["totals_adjusted"]
+            summary += (f"  | adjusted_net={ta['realized_pnl_pct_sum_adjusted']:.4f}% "
+                        f"[depth confidence: {adj['confidence']}]")
+        pair_summaries.append(summary)
 
 
 def cmd_run_nil_hold_spread_cohort(state: dict, run_utc: str, all_events: list[dict],
-                                    pair_summaries: list[str]) -> None:
+                                    pair_summaries: list[str], all_adjustment_rows: list[dict],
+                                    adj: dict) -> None:
     """Process NILUSDT's own 10-instance hold/spread-width matrix. One kline
     fetch (NILUSDT only) fanned out to all 10 hold x width variants, each
     with its own isolated `ps` dict. Reads/writes only
     state["pairs"][<NIL matrix id>] — never touches the bare "NILUSDT"
     live-pair key, the 7-pair 70-instance matrix's keys, or NIL's own
     spread-width cohort keys above.
+
+    Live-P&L adjustment applied the same way as cmd_run_nil_spread_cohort:
+    `adj` is the same shared estimate_pair_adjustment("NILUSDT") result
+    passed in by the caller (one call, shared across all 16 NIL-only
+    instances — depth data doesn't vary by strategy params), seeded/applied
+    per-instance via the existing helpers.
     """
     instance_ids = list(NIL_HOLD_SPREAD_INSTRUMENTS.keys())
     print(f"\n[NILUSDT hold/spread matrix] fetching klines (shared across "
@@ -819,13 +1090,25 @@ def cmd_run_nil_hold_spread_cohort(state: dict, run_utc: str, all_events: list[d
             spread_pct=meta["spread_pct"], max_hold_bars=meta["max_hold_bars"])
         all_events.extend(events)
 
+        record_adjustment_model_snapshot(ps, adj, run_utc)
+        seed_rows = ensure_adjustment_seeded(instance_id, ps, adj, run_utc)
+        all_adjustment_rows.extend(seed_rows)
+        if events:
+            new_adj_rows = apply_adjustments_to_new_events(instance_id, ps, events, adj, run_utc)
+            all_adjustment_rows.extend(new_adj_rows)
+
         t = ps["totals"]
         n_rts = t["complete_rts"] + t["forced_closes"]
         avg = t["realized_pnl_pct_sum"] / max(n_rts, 1)
-        pair_summaries.append(
+        summary = (
             f"{instance_id}: fills={t['fills']} rt={t['complete_rts']} forced={t['forced_closes']} | "
             f"avg_net={avg:.4f}%/RT  total_net={t['realized_pnl_pct_sum']:.4f}%"
         )
+        if "totals_adjusted" in ps:
+            ta = ps["totals_adjusted"]
+            summary += (f"  | adjusted_net={ta['realized_pnl_pct_sum_adjusted']:.4f}% "
+                        f"[depth confidence: {adj['confidence']}]")
+        pair_summaries.append(summary)
 
 
 # ── Commands ─────────────────────────────────────────────────────────────────
@@ -845,6 +1128,11 @@ def cmd_status(state: dict) -> None:
         print(f"    Pending ask:  {ps['pending_ask'] or 'none'}")
         print(f"    Totals: fills={t['fills']}  complete={t['complete_rts']}  forced={t['forced_closes']}  "
               f"realized_sum={t['realized_pnl_pct_sum']:.4f}%")
+        if "totals_adjusted" in ps:
+            ta, am = ps["totals_adjusted"], ps.get("adjustment_model", {})
+            print(f"    Adjusted:  realized_sum_adjusted={ta['realized_pnl_pct_sum_adjusted']:.4f}%  "
+                  f"(slip={ta['slippage_adjustment_pct_sum']:+.4f}pp fill_prob={ta['fill_prob_adjustment_pct_sum']:+.4f}pp)  "
+                  f"depth_confidence={am.get('confidence', '?')}")
 
 
 def _known_instance(pair: str) -> bool:
@@ -910,6 +1198,11 @@ def cmd_status_cohort(state: dict) -> None:
             print(f"    {iid:<20} start={ps.get('start_date_utc') or 'not yet initialised':<22} "
                   f"fills={t['fills']:>3} rt={t['complete_rts']:>3} forced={t['forced_closes']:>3} "
                   f"net={t['realized_pnl_pct_sum']:.4f}%{suspended}{note}")
+            if "totals_adjusted" in ps:
+                ta, am = ps["totals_adjusted"], ps.get("adjustment_model", {})
+                print(f"    {'':<20} adjusted_net={ta['realized_pnl_pct_sum_adjusted']:.4f}% "
+                      f"(slip={ta['slippage_adjustment_pct_sum']:+.4f}pp fill_prob={ta['fill_prob_adjustment_pct_sum']:+.4f}pp) "
+                      f"depth_confidence={am.get('confidence', '?')}")
 
 
 def cmd_status_hold_spread(state: dict) -> None:
@@ -933,6 +1226,11 @@ def cmd_status_hold_spread(state: dict) -> None:
                 print(f"    {iid:<20} start={ps.get('start_date_utc') or 'not yet initialised':<22} "
                       f"fills={t['fills']:>3} rt={t['complete_rts']:>3} forced={t['forced_closes']:>3} "
                       f"net={t['realized_pnl_pct_sum']:.4f}%{suspended}")
+                if "totals_adjusted" in ps:
+                    ta, am = ps["totals_adjusted"], ps.get("adjustment_model", {})
+                    print(f"    {'':<20} adjusted_net={ta['realized_pnl_pct_sum_adjusted']:.4f}% "
+                          f"(slip={ta['slippage_adjustment_pct_sum']:+.4f}pp fill_prob={ta['fill_prob_adjustment_pct_sum']:+.4f}pp) "
+                          f"depth_confidence={am.get('confidence', '?')}")
 
 
 def cmd_status_nil_cohort(state: dict) -> None:
@@ -978,7 +1276,9 @@ def cmd_status_nil_hold_spread(state: dict) -> None:
 def cmd_run(state: dict, dry_run: bool = False) -> None:
     run_utc = now_utc()
     all_events: list[dict] = []
+    all_adjustment_rows: list[dict] = []
     pair_summaries: list[str] = []
+    pair_adjustments: dict = {}   # pair -> this-run's estimate_pair_adjustment() dict
 
     for pair in PAIRS:
         ps = state["pairs"][pair]
@@ -991,6 +1291,19 @@ def cmd_run(state: dict, dry_run: bool = False) -> None:
             print(f"\n[{pair}] SUSPENDED — skipping")
             pair_summaries.append(f"{pair}: SUSPENDED")
             continue
+
+        # ── Live-P&L adjustment: compute this run's estimate + one-time seed ──
+        # Runs unconditionally for every non-suspended live pair, independent
+        # of whether there are new bars this hour, so the retroactive seed
+        # fires on the very first run after deployment rather than waiting
+        # for the next bar close. Idempotent — ensure_adjustment_seeded()
+        # no-ops after the first successful seed.
+        if pair in ADJUSTMENT_LIVE_PAIRS:
+            adj = estimate_pair_adjustment(pair)
+            pair_adjustments[pair] = adj
+            record_adjustment_model_snapshot(ps, adj, run_utc)
+            seed_rows = ensure_adjustment_seeded(pair, ps, adj, run_utc)
+            all_adjustment_rows.extend(seed_rows)
 
         print(f"\n[{pair}] fetching klines...")
         # Use startTime when we have a last-bar anchor so gaps > 2 days are caught.
@@ -1080,27 +1393,41 @@ def cmd_run(state: dict, dry_run: bool = False) -> None:
             elif et.startswith("FORCED"):
                 print(f"    CLOSE  {et:<20} net={e['net_pct']:.4f}%  hold={e['hold_bars']}h")
 
+        if pair in ADJUSTMENT_LIVE_PAIRS and pair in pair_adjustments:
+            new_adj_rows = apply_adjustments_to_new_events(
+                pair, ps, events, pair_adjustments[pair], run_utc)
+            all_adjustment_rows.extend(new_adj_rows)
+
         t = ps["totals"]
         n_rts = t["complete_rts"] + t["forced_closes"]
         avg = t["realized_pnl_pct_sum"] / max(n_rts, 1)
-        pair_summaries.append(
+        summary = (
             f"{pair}: {len(new_bars)} bar(s) processed | "
             f"fills={t['fills']} rt={t['complete_rts']} forced={t['forced_closes']} | "
             f"avg_net={avg:.4f}%/RT  total_net={t['realized_pnl_pct_sum']:.4f}%"
         )
+        if "totals_adjusted" in ps:
+            ta = ps["totals_adjusted"]
+            am = ps.get("adjustment_model", {})
+            summary += (f"  | adjusted_net={ta['realized_pnl_pct_sum_adjusted']:.4f}% "
+                        f"(slip={ta['slippage_adjustment_pct_sum']:+.4f}pp "
+                        f"fill_prob={ta['fill_prob_adjustment_pct_sum']:+.4f}pp) "
+                        f"[depth confidence: {am.get('confidence', '?')}]")
+        pair_summaries.append(summary)
         time.sleep(0.3)
 
     # ── Spread-width cohort (42 instances, separate keys, see above) ────────
-    cmd_run_cohorts(state, run_utc, all_events, pair_summaries)
+    cmd_run_cohorts(state, run_utc, all_events, pair_summaries, all_adjustment_rows)
 
     # ── Hold/spread-width matrix cohort (70 instances, separate keys) ───────
-    cmd_run_hold_spread_cohort(state, run_utc, all_events, pair_summaries)
+    cmd_run_hold_spread_cohort(state, run_utc, all_events, pair_summaries, all_adjustment_rows)
 
-    # ── NILUSDT-only spread-width cohort (6 instances, separate keys) ───────
-    cmd_run_nil_spread_cohort(state, run_utc, all_events, pair_summaries)
-
-    # ── NILUSDT-only hold/spread-width matrix (10 instances, separate keys) ──
-    cmd_run_nil_hold_spread_cohort(state, run_utc, all_events, pair_summaries)
+    # ── NILUSDT-only spread-width cohort (6) + hold/spread-width matrix (10) ──
+    # One estimate_pair_adjustment("NILUSDT") call, shared across all 16
+    # instances (depth data doesn't vary by spread width or hold window).
+    nil_adj = estimate_pair_adjustment(NIL_SPREAD_COHORT_SYMBOL)
+    cmd_run_nil_spread_cohort(state, run_utc, all_events, pair_summaries, all_adjustment_rows, nil_adj)
+    cmd_run_nil_hold_spread_cohort(state, run_utc, all_events, pair_summaries, all_adjustment_rows, nil_adj)
 
     # ── Finalise ─────────────────────────────────────────────────────────────
     if state["meta"]["start_date_utc"] is None:
@@ -1138,6 +1465,7 @@ def cmd_run(state: dict, dry_run: bool = False) -> None:
         "instruments": NIL_HOLD_SPREAD_INSTRUMENTS,
     }
     append_events(all_events, dry_run=dry_run)
+    append_adjustments(all_adjustment_rows, dry_run=dry_run)
     save_state(state, dry_run=dry_run)
 
     tag = " [DRY RUN]" if dry_run else ""

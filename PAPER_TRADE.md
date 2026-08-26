@@ -415,6 +415,28 @@ one day later: 2026-08-22/29, 2026-09-05; XYO's land 2026-08-27, 2026-09-03,
 but each pair's clock is independently tracked; NIL's land 2026-08-30, 2026-09-06,
 2026-09-13).
 
+### Weekly negative-control re-run (automated, separate from the check above)
+
+Distinct from the manual per-pair check above (which still requires a human
+to run `paper_report.py` and write the narrative into the Results section
+for each pair). This is a pool-wide diagnostic — not a per-pair gate
+check — that now runs on its own, unattended:
+
+- **Script:** `src/negative_control_check.py`. Re-checks every live pair's
+  real fill-adjusted monthly net against a random-entry control and a
+  shuffled-price control, on a fresh MEXC kline pull each time (not the
+  static gate-registration data).
+- **Cadence:** weekly, cron-installed, Sunday 09:00 UTC — offset 2h from
+  `paper_report.py`'s existing Sunday 07:00 UTC weekly-report cron so the
+  two jobs don't overlap.
+- **Results log:** `docs/NEGATIVE_CONTROL_WEEKLY.md` (append-only; each run
+  adds a new dated entry, nothing is overwritten or backfilled).
+- **First real run — 2026-08-25T19:06:01Z:** 8/8 live pairs beat both
+  controls. See that file for the full per-pair numbers.
+- **Scope:** diagnostic only — read-only, never writes to
+  `paper_trade_state.json` or `paper_trade_events.csv`, and has no effect on
+  any pair's clock or quoting.
+
 ### MINA-specific monitoring
 
 MINA fell -21% during the 20-day backtest window (2026-07-25 to 2026-08-14).
@@ -515,6 +537,24 @@ net/forced-close of **-1.1084%**, worse than every other pair in the pool
 including the rejected ETHW's -0.71%. G3 clears only because forced-close
 rate is low (11.1%) and complete-RT volume is high — the same mechanism that
 kept GOAT's G3 positive, but at a more severe per-event loss than GOAT's.
+
+**AS@1h flag/grace-window status (point-in-time, not a live monitor).**
+`src/risk_controls.py`'s `ASGraceWindowMonitor` (built and dry-run tested,
+**not wired into any live loop** — see that file's own status note) replays
+each pair's real fill history against a rolling-20-fill mean AS@1h and a
+48h grace window before what would be an auto-suspend. As of the most
+recent `--dry-run` pass (2026-08-26, replaying real fills through that
+date): PIPPIN has had the **longest flagged-episode duration of any of the
+10 live pairs** — 18.0h (2026-08-22T05:00Z → 23:00Z), well inside the 48h
+window, and self-recovered without reaching it. 5 flagged episodes total in
+PIPPIN's history to date; the most recent began 2026-08-26T17:00:00Z and
+was **still open** (freshly flagged, 0.0h elapsed) as of that dry-run pass —
+not a concern at that duration, but the longest-duration precedent above
+means PIPPIN is the pair most likely to actually reach the 48h threshold
+first if one ever does. No pair has reached 48h historically. Because this
+monitor is read-only and does not auto-refresh, treat this paragraph as a
+snapshot, not a live status — re-run `python3 src/risk_controls.py
+--dry-run` for the current state before relying on it.
 
 **Stop condition:** same as the other pairs — if PIPPIN bid-fill AS at t+1h
 drops below -0.50%, suspend immediately:
@@ -735,7 +775,10 @@ that its gate pass was a false positive — see "Status Update" at top of this
 doc. MINA/USDT continues unaffected. Same day: SFPUSDT added to this paper
 trade on its own independent clock — see "Results — SFP" below.
 
-*Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
+*Remaining weekly summary (per-pair gate-metric narrative) TBD — run
+`python src/paper_report.py` and paste here. This is still a manual step;
+only the pool-wide negative-control re-run is automated — see "Weekly
+negative-control re-run" above and `docs/NEGATIVE_CONTROL_WEEKLY.md`.*
 
 ### Week 2 — 2026-08-21 to 2026-08-28
 
@@ -787,7 +830,10 @@ together over the next few weekly checks rather than treating G4 as an
 isolated flag. Neither is an auto-suspend trigger on its own — SFP continues
 running — but both warrant closer attention heading into Week 2.
 
-*Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
+*Remaining weekly summary (per-pair gate-metric narrative) TBD — run
+`python src/paper_report.py` and paste here. This is still a manual step;
+only the pool-wide negative-control re-run is automated — see "Weekly
+negative-control re-run" above and `docs/NEGATIVE_CONTROL_WEEKLY.md`.*
 
 ### Week 2 — 2026-08-22 to 2026-08-29
 
@@ -819,7 +865,10 @@ trading bar 2026-08-20T20:00:00Z). Registered gate re-run at this repo's flat
 Verified via `--dry-run`/`--status` before and after that MINA's and SFP's
 `start_date_utc` and live totals were untouched by the addition.
 
-*Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
+*Remaining weekly summary (per-pair gate-metric narrative) TBD — run
+`python src/paper_report.py` and paste here. This is still a manual step;
+only the pool-wide negative-control re-run is automated — see "Weekly
+negative-control re-run" above and `docs/NEGATIVE_CONTROL_WEEKLY.md`.*
 
 ### Week 2 — 2026-08-27 to 2026-09-03
 
@@ -854,7 +903,10 @@ GATE.md. Two watch items logged at registration (mean net/forced-close
 after that MINA's, SFP's, and XYO's `start_date_utc` and live totals were
 untouched by the addition.
 
-*Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
+*Remaining weekly summary (per-pair gate-metric narrative) TBD — run
+`python src/paper_report.py` and paste here. This is still a manual step;
+only the pool-wide negative-control re-run is automated — see "Weekly
+negative-control re-run" above and `docs/NEGATIVE_CONTROL_WEEKLY.md`.*
 
 ### Week 2 — 2026-08-28 to 2026-09-04
 
@@ -887,7 +939,10 @@ watch items — see GATE.md and `docs/HANDOFF_XPRUSDT.md`. Verified via
 `--dry-run`/`--status` before and after that MINA's, SFP's, XYO's, and GOAT's
 `start_date_utc` and live totals were untouched.
 
-*Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
+*Remaining weekly summary (per-pair gate-metric narrative) TBD — run
+`python src/paper_report.py` and paste here. This is still a manual step;
+only the pool-wide negative-control re-run is automated — see "Weekly
+negative-control re-run" above and `docs/NEGATIVE_CONTROL_WEEKLY.md`.*
 
 ### Week 2 — 2026-08-28 to 2026-09-04
 
@@ -921,7 +976,10 @@ net/forced-close of -1.1084%, the worst in the pool. Verified via
 `--dry-run`/`--status` before and after that MINA's, SFP's, XYO's, and GOAT's
 `start_date_utc` and live totals were untouched.
 
-*Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
+*Remaining weekly summary (per-pair gate-metric narrative) TBD — run
+`python src/paper_report.py` and paste here. This is still a manual step;
+only the pool-wide negative-control re-run is automated — see "Weekly
+negative-control re-run" above and `docs/NEGATIVE_CONTROL_WEEKLY.md`.*
 
 ### Week 2 — 2026-08-28 to 2026-09-04
 
@@ -956,7 +1014,10 @@ net/forced-close (-0.6850%). Verified via `--dry-run`/`--status` before and
 after that MINA's, SFP's, XYO's, and GOAT's `start_date_utc` and live totals
 were untouched.
 
-*Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
+*Remaining weekly summary (per-pair gate-metric narrative) TBD — run
+`python src/paper_report.py` and paste here. This is still a manual step;
+only the pool-wide negative-control re-run is automated — see "Weekly
+negative-control re-run" above and `docs/NEGATIVE_CONTROL_WEEKLY.md`.*
 
 ### Week 2 — 2026-08-28 to 2026-09-04
 
@@ -997,7 +1058,10 @@ isolation, and mean net/forced-close of -4.2899% (worst in the pool by ~4x).
 Verified via `--dry-run`/`--status` before and after that every other pair's
 `start_date_utc` and live totals were untouched.
 
-*Remaining weekly summary TBD — run `python src/paper_report.py` and paste here*
+*Remaining weekly summary (per-pair gate-metric narrative) TBD — run
+`python src/paper_report.py` and paste here. This is still a manual step;
+only the pool-wide negative-control re-run is automated — see "Weekly
+negative-control re-run" above and `docs/NEGATIVE_CONTROL_WEEKLY.md`.*
 
 ### Week 2 — 2026-08-30 to 2026-09-06
 

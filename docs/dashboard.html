@@ -193,11 +193,11 @@
     <h1>Spread Lab</h1>
     <p class="masthead-sub">Live paper-trade research and the spread-width forward-test cohort, read directly from <span class="mono">data/paper_trade_state.json</span>. Local to this repo — no capital, no live orders.</p>
     <div class="meta-strip">
-      <span><b>7</b> live pairs</span>
+      <span><b>8</b> live pairs</span>
       <span><b>42</b> cohort instances</span>
-      <span><b>49</b> total tracked</span>
-      <span>Last run: <b class="mono">2026-08-22T17:05:02Z</b></span>
-      <span>Generated: <b class="mono">2026-08-22 17:07 UTC</b></span>
+      <span><b>50</b> total tracked</span>
+      <span>Last run: <b class="mono">2026-08-25T20:05:12Z</b></span>
+      <span>Generated: <b class="mono">2026-08-25 20:10 UTC</b></span>
     </div>
   </header>
 
@@ -207,80 +207,98 @@
     <div class="live-table-wrap">
       <table>
         <thead>
-          <tr><th>Pair</th><th>Started</th><th>Age</th><th>Fills</th><th>Complete</th><th>Forced</th><th>FC rate</th><th>Realized net</th></tr>
+          <tr><th>Pair</th><th>Started</th><th>Age</th><th>Fills</th><th>Complete</th><th>Forced</th><th>FC rate</th><th>Realized net (raw)</th><th title="Depth-based slippage on forced closes + pair-specific fill-probability haircut on complete RTs. See src/adjustment_model.py.">Adjusted net</th></tr>
         </thead>
         <tbody><tr class="">
           <td class="col-symbol"><span class="mono sym">MINAUSDT</span></td>
           <td class="mono num">2026-08-14</td>
-          <td class="mono num">7.8d</td>
-          <td class="mono num">97</td>
-          <td class="mono num">41</td>
-          <td class="mono num">15</td>
-          <td class="mono num">26.8%</td>
-          <td class="mono num pos">+26.6078%</td>
+          <td class="mono num">11.0d</td>
+          <td class="mono num">169</td>
+          <td class="mono num">75</td>
+          <td class="mono num">18</td>
+          <td class="mono num">19.4%</td>
+          <td class="mono num pos">+53.4464%</td>
+          <td class="mono num pos" title="depth confidence: thin (2 snapshots) — fill-probability is a coarse proxy, not true queue position">+23.3414% <span class="chip chip-muted" style="font-size:0.7em">thin</span></td>
         </tr><tr class="">
           <td class="col-symbol"><span class="mono sym">SFPUSDT</span></td>
           <td class="mono num">2026-08-15</td>
-          <td class="mono num">7.1d</td>
-          <td class="mono num">97</td>
-          <td class="mono num">36</td>
-          <td class="mono num">24</td>
-          <td class="mono num">40.0%</td>
-          <td class="mono num pos">+13.3127%</td>
+          <td class="mono num">10.2d</td>
+          <td class="mono num">158</td>
+          <td class="mono num">65</td>
+          <td class="mono num">27</td>
+          <td class="mono num">29.3%</td>
+          <td class="mono num pos">+35.4429%</td>
+          <td class="mono num pos" title="depth confidence: thin (2 snapshots) — fill-probability is a coarse proxy, not true queue position">+14.4839% <span class="chip chip-muted" style="font-size:0.7em">thin</span></td>
         </tr><tr class="">
           <td class="col-symbol"><span class="mono sym">XYOUSDT</span></td>
           <td class="mono num">2026-08-20</td>
-          <td class="mono num">1.9d</td>
-          <td class="mono num">42</td>
-          <td class="mono num">19</td>
-          <td class="mono num">4</td>
-          <td class="mono num">17.4%</td>
-          <td class="mono num pos">+11.3936%</td>
+          <td class="mono num">5.0d</td>
+          <td class="mono num">128</td>
+          <td class="mono num">61</td>
+          <td class="mono num">5</td>
+          <td class="mono num">7.6%</td>
+          <td class="mono num pos">+52.0352%</td>
+          <td class="mono num pos" title="depth confidence: thin (2 snapshots) — fill-probability is a coarse proxy, not true queue position">+35.6506% <span class="chip chip-muted" style="font-size:0.7em">thin</span></td>
         </tr><tr class="">
           <td class="col-symbol"><span class="mono sym">GOATUSDT</span></td>
           <td class="mono num">2026-08-21</td>
-          <td class="mono num">0.9d</td>
-          <td class="mono num">24</td>
-          <td class="mono num">12</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">+12.0000%</td>
+          <td class="mono num">4.0d</td>
+          <td class="mono num">98</td>
+          <td class="mono num">46</td>
+          <td class="mono num">5</td>
+          <td class="mono num">9.8%</td>
+          <td class="mono num pos">+33.3096%</td>
+          <td class="mono num pos" title="depth confidence: thin (2 snapshots) — fill-probability is a coarse proxy, not true queue position">+28.5016% <span class="chip chip-muted" style="font-size:0.7em">thin</span></td>
         </tr><tr class="">
           <td class="col-symbol"><span class="mono sym">XPRUSDT</span></td>
           <td class="mono num">2026-08-21</td>
-          <td class="mono num">0.8d</td>
+          <td class="mono num">3.9d</td>
+          <td class="mono num">36</td>
           <td class="mono num">10</td>
-          <td class="mono num">3</td>
-          <td class="mono num">3</td>
-          <td class="mono num">50.0%</td>
-          <td class="mono num pos">+1.3511%</td>
+          <td class="mono num">15</td>
+          <td class="mono num">60.0%</td>
+          <td class="mono num pos">+9.1988%</td>
+          <td class="mono num pos" title="depth confidence: thin (2 snapshots) — fill-probability is a coarse proxy, not true queue position">+8.0523% <span class="chip chip-muted" style="font-size:0.7em">thin</span></td>
         </tr><tr class="">
           <td class="col-symbol"><span class="mono sym">PIPPINUSDT</span></td>
           <td class="mono num">2026-08-21</td>
-          <td class="mono num">0.8d</td>
-          <td class="mono num">20</td>
-          <td class="mono num">9</td>
-          <td class="mono num">1</td>
-          <td class="mono num">10.0%</td>
-          <td class="mono num pos">+6.0181%</td>
+          <td class="mono num">3.9d</td>
+          <td class="mono num">83</td>
+          <td class="mono num">37</td>
+          <td class="mono num">8</td>
+          <td class="mono num">17.8%</td>
+          <td class="mono num pos">+20.8024%</td>
+          <td class="mono num pos" title="depth confidence: robust (31 snapshots) — fill-probability is a coarse proxy, not true queue position">+17.0462% <span class="chip chip-muted" style="font-size:0.7em">robust</span></td>
         </tr><tr class="">
           <td class="col-symbol"><span class="mono sym">SUSDT</span></td>
           <td class="mono num">2026-08-21</td>
-          <td class="mono num">0.8d</td>
-          <td class="mono num">16</td>
-          <td class="mono num">7</td>
-          <td class="mono num">2</td>
-          <td class="mono num">22.2%</td>
-          <td class="mono num pos">+6.7664%</td>
+          <td class="mono num">3.9d</td>
+          <td class="mono num">74</td>
+          <td class="mono num">33</td>
+          <td class="mono num">8</td>
+          <td class="mono num">19.5%</td>
+          <td class="mono num pos">+20.0946%</td>
+          <td class="mono num pos" title="depth confidence: thin (2 snapshots) — fill-probability is a coarse proxy, not true queue position">+16.8663% <span class="chip chip-muted" style="font-size:0.7em">thin</span></td>
+        </tr><tr class="">
+          <td class="col-symbol"><span class="mono sym">NILUSDT</span></td>
+          <td class="mono num">2026-08-23</td>
+          <td class="mono num">2.3d</td>
+          <td class="mono num">59</td>
+          <td class="mono num">29</td>
+          <td class="mono num">1</td>
+          <td class="mono num">3.3%</td>
+          <td class="mono num pos">+23.9526%</td>
+          <td class="mono num pos" title="depth confidence: robust (31 snapshots) — fill-probability is a coarse proxy, not true queue position">+21.0856% <span class="chip chip-muted" style="font-size:0.7em">robust</span></td>
         </tr><tr class="row-suspended">
           <td class="col-symbol"><span class="mono sym">KAVAUSDT</span><span class="chip chip-muted">suspended</span></td>
           <td class="mono num">2026-08-14</td>
-          <td class="mono num">7.8d</td>
+          <td class="mono num">11.0d</td>
           <td class="mono num">1</td>
           <td class="mono num">0</td>
           <td class="mono num">1</td>
           <td class="mono num">100.0%</td>
           <td class="mono num neg">-0.0682%</td>
+          <td class="mono num">—</td>
         </tr></tbody>
       </table>
     </div>
@@ -299,9 +317,9 @@
             <span class="width-badge">0.5%</span>
             <span class="cohort-sub">Narrower than the live 1.0% baseline.</span>
             <span class="cohort-agg mono">
-              7 pairs · 0 fills · 0 RT ·
-              0 forced ·
-              <span class="pos">0.0000%</span> combined
+              7 pairs · 628 fills · 300 RT ·
+              24 forced ·
+              <span class="pos">+102.0154%</span> combined
             </span>
             <span class="chevron" aria-hidden="true"></span>
           </div>
@@ -319,78 +337,78 @@
             <span class="mono sym">MINAUSDT-0.5</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">94</td>
+          <td class="mono num">46</td>
+          <td class="mono num">2</td>
+          <td class="mono num">4.2%</td>
+          <td class="mono num pos">+18.3816%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">SFPUSDT-0.5</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">75</td>
+          <td class="mono num">35</td>
+          <td class="mono num">4</td>
+          <td class="mono num">10.3%</td>
+          <td class="mono num pos">+10.4343%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">XYOUSDT-0.5</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">130</td>
+          <td class="mono num">65</td>
           <td class="mono num">0</td>
           <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num pos">+32.5000%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">GOATUSDT-0.5</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">105</td>
+          <td class="mono num">51</td>
+          <td class="mono num">2</td>
+          <td class="mono num">3.8%</td>
+          <td class="mono num pos">+18.3046%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">XPRUSDT-0.5</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">58</td>
+          <td class="mono num">25</td>
+          <td class="mono num">7</td>
+          <td class="mono num">21.9%</td>
+          <td class="mono num pos">+10.5907%</td>
         </tr><tr class="row-flagged">
           <td class="col-symbol">
             <span class="mono sym">PIPPINUSDT-0.5</span>
             <div class="risk-flag">⚠ Known risk: forced-close severity worsens at narrower spreads (backtest finding, see docs/SPREAD_WIDTH_COHORT_2026-08-22.md)</div>
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">84</td>
+          <td class="mono num">40</td>
+          <td class="mono num">4</td>
+          <td class="mono num">9.1%</td>
+          <td class="mono num pos">+9.5322%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">SUSDT-0.5</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">82</td>
+          <td class="mono num">38</td>
+          <td class="mono num">5</td>
+          <td class="mono num">11.6%</td>
+          <td class="mono num pos">+2.2720%</td>
         </tr></tbody>
           </table>
         </div>
@@ -401,9 +419,9 @@
             <span class="width-badge">0.6%</span>
             <span class="cohort-sub">Narrower than the live 1.0% baseline.</span>
             <span class="cohort-agg mono">
-              7 pairs · 0 fills · 0 RT ·
-              0 forced ·
-              <span class="pos">0.0000%</span> combined
+              7 pairs · 580 fills · 275 RT ·
+              27 forced ·
+              <span class="pos">+118.8515%</span> combined
             </span>
             <span class="chevron" aria-hidden="true"></span>
           </div>
@@ -421,78 +439,78 @@
             <span class="mono sym">MINAUSDT-0.6</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">92</td>
+          <td class="mono num">45</td>
+          <td class="mono num">2</td>
+          <td class="mono num">4.3%</td>
+          <td class="mono num pos">+22.4836%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">SFPUSDT-0.6</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">71</td>
+          <td class="mono num">33</td>
+          <td class="mono num">4</td>
+          <td class="mono num">10.8%</td>
+          <td class="mono num pos">+12.9335%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">XYOUSDT-0.6</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">114</td>
+          <td class="mono num">57</td>
           <td class="mono num">0</td>
           <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num pos">+34.2000%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">GOATUSDT-0.6</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">98</td>
+          <td class="mono num">47</td>
+          <td class="mono num">3</td>
+          <td class="mono num">6.0%</td>
+          <td class="mono num pos">+21.4138%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">XPRUSDT-0.6</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">49</td>
+          <td class="mono num">20</td>
+          <td class="mono num">8</td>
+          <td class="mono num">28.6%</td>
+          <td class="mono num pos">+10.7357%</td>
         </tr><tr class="row-flagged">
           <td class="col-symbol">
             <span class="mono sym">PIPPINUSDT-0.6</span>
             <div class="risk-flag">⚠ Known risk: forced-close severity worsens at narrower spreads (backtest finding, see docs/SPREAD_WIDTH_COHORT_2026-08-22.md)</div>
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">81</td>
+          <td class="mono num">38</td>
+          <td class="mono num">5</td>
+          <td class="mono num">11.6%</td>
+          <td class="mono num pos">+11.6820%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">SUSDT-0.6</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">75</td>
+          <td class="mono num">35</td>
+          <td class="mono num">5</td>
+          <td class="mono num">12.5%</td>
+          <td class="mono num pos">+5.4029%</td>
         </tr></tbody>
           </table>
         </div>
@@ -503,9 +521,9 @@
             <span class="width-badge">0.7%</span>
             <span class="cohort-sub">Narrower than the live 1.0% baseline.</span>
             <span class="cohort-agg mono">
-              7 pairs · 0 fills · 0 RT ·
-              0 forced ·
-              <span class="pos">0.0000%</span> combined
+              7 pairs · 519 fills · 244 RT ·
+              28 forced ·
+              <span class="pos">+120.6932%</span> combined
             </span>
             <span class="chevron" aria-hidden="true"></span>
           </div>
@@ -523,78 +541,78 @@
             <span class="mono sym">MINAUSDT-0.7</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">92</td>
+          <td class="mono num">45</td>
+          <td class="mono num">2</td>
+          <td class="mono num">4.3%</td>
+          <td class="mono num pos">+27.0855%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">SFPUSDT-0.7</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">68</td>
+          <td class="mono num">32</td>
+          <td class="mono num">3</td>
+          <td class="mono num">8.6%</td>
+          <td class="mono num pos">+15.7655%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">XYOUSDT-0.7</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">86</td>
+          <td class="mono num">42</td>
+          <td class="mono num">1</td>
+          <td class="mono num">2.3%</td>
+          <td class="mono num pos">+27.8929%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">GOATUSDT-0.7</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">88</td>
+          <td class="mono num">42</td>
+          <td class="mono num">4</td>
+          <td class="mono num">8.7%</td>
+          <td class="mono num pos">+17.2601%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">XPRUSDT-0.7</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">37</td>
+          <td class="mono num">14</td>
+          <td class="mono num">8</td>
+          <td class="mono num">36.4%</td>
+          <td class="mono num pos">+9.7359%</td>
         </tr><tr class="row-flagged">
           <td class="col-symbol">
             <span class="mono sym">PIPPINUSDT-0.7</span>
             <div class="risk-flag">⚠ Known risk: forced-close severity worsens at narrower spreads (backtest finding, see docs/SPREAD_WIDTH_COHORT_2026-08-22.md)</div>
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">77</td>
+          <td class="mono num">36</td>
+          <td class="mono num">5</td>
+          <td class="mono num">12.2%</td>
+          <td class="mono num pos">+15.2024%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">SUSDT-0.7</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">71</td>
+          <td class="mono num">33</td>
+          <td class="mono num">5</td>
+          <td class="mono num">13.2%</td>
+          <td class="mono num pos">+7.7509%</td>
         </tr></tbody>
           </table>
         </div>
@@ -605,9 +623,9 @@
             <span class="width-badge">0.8%</span>
             <span class="cohort-sub">Narrower than the live 1.0% baseline.</span>
             <span class="cohort-agg mono">
-              7 pairs · 0 fills · 0 RT ·
-              0 forced ·
-              <span class="pos">0.0000%</span> combined
+              7 pairs · 489 fills · 226 RT ·
+              33 forced ·
+              <span class="pos">+126.0019%</span> combined
             </span>
             <span class="chevron" aria-hidden="true"></span>
           </div>
@@ -625,78 +643,78 @@
             <span class="mono sym">MINAUSDT-0.8</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">84</td>
+          <td class="mono num">40</td>
+          <td class="mono num">4</td>
+          <td class="mono num">9.1%</td>
+          <td class="mono num pos">+25.5647%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">SFPUSDT-0.8</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">64</td>
+          <td class="mono num">30</td>
+          <td class="mono num">3</td>
+          <td class="mono num">9.1%</td>
+          <td class="mono num pos">+17.5149%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">XYOUSDT-0.8</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">86</td>
+          <td class="mono num">42</td>
+          <td class="mono num">1</td>
+          <td class="mono num">2.3%</td>
+          <td class="mono num pos">+32.1426%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">GOATUSDT-0.8</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">80</td>
+          <td class="mono num">37</td>
+          <td class="mono num">5</td>
+          <td class="mono num">11.9%</td>
+          <td class="mono num pos">+16.4074%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">XPRUSDT-0.8</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">33</td>
+          <td class="mono num">11</td>
+          <td class="mono num">10</td>
+          <td class="mono num">47.6%</td>
+          <td class="mono num pos">+7.7621%</td>
         </tr><tr class="row-flagged">
           <td class="col-symbol">
             <span class="mono sym">PIPPINUSDT-0.8</span>
             <div class="risk-flag">⚠ Known risk: forced-close severity worsens at narrower spreads (backtest finding, see docs/SPREAD_WIDTH_COHORT_2026-08-22.md)</div>
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">73</td>
+          <td class="mono num">34</td>
+          <td class="mono num">5</td>
+          <td class="mono num">12.8%</td>
+          <td class="mono num pos">+16.1114%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">SUSDT-0.8</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">69</td>
+          <td class="mono num">32</td>
+          <td class="mono num">5</td>
+          <td class="mono num">13.5%</td>
+          <td class="mono num pos">+10.4989%</td>
         </tr></tbody>
           </table>
         </div>
@@ -707,9 +725,9 @@
             <span class="width-badge">0.9%</span>
             <span class="cohort-sub">Narrower than the live 1.0% baseline.</span>
             <span class="cohort-agg mono">
-              7 pairs · 0 fills · 0 RT ·
-              0 forced ·
-              <span class="pos">0.0000%</span> combined
+              7 pairs · 463 fills · 213 RT ·
+              33 forced ·
+              <span class="pos">+134.2883%</span> combined
             </span>
             <span class="chevron" aria-hidden="true"></span>
           </div>
@@ -727,78 +745,78 @@
             <span class="mono sym">MINAUSDT-0.9</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">77</td>
+          <td class="mono num">37</td>
+          <td class="mono num">3</td>
+          <td class="mono num">7.5%</td>
+          <td class="mono num pos">+25.9858%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">SFPUSDT-0.9</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">64</td>
+          <td class="mono num">30</td>
+          <td class="mono num">3</td>
+          <td class="mono num">9.1%</td>
+          <td class="mono num pos">+20.6643%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">XYOUSDT-0.9</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">86</td>
+          <td class="mono num">42</td>
+          <td class="mono num">1</td>
+          <td class="mono num">2.3%</td>
+          <td class="mono num pos">+36.3919%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">GOATUSDT-0.9</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">78</td>
+          <td class="mono num">36</td>
+          <td class="mono num">5</td>
+          <td class="mono num">12.2%</td>
+          <td class="mono num pos">+19.4585%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">XPRUSDT-0.9</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">28</td>
+          <td class="mono num">9</td>
+          <td class="mono num">9</td>
+          <td class="mono num">50.0%</td>
+          <td class="mono num pos">+8.3713%</td>
         </tr><tr class="row-flagged">
           <td class="col-symbol">
             <span class="mono sym">PIPPINUSDT-0.9</span>
             <div class="risk-flag">⚠ Known risk: forced-close severity worsens at narrower spreads (backtest finding, see docs/SPREAD_WIDTH_COHORT_2026-08-22.md)</div>
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">66</td>
+          <td class="mono num">30</td>
+          <td class="mono num">6</td>
+          <td class="mono num">16.7%</td>
+          <td class="mono num pos">+14.5660%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">SUSDT-0.9</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">64</td>
+          <td class="mono num">29</td>
+          <td class="mono num">6</td>
+          <td class="mono num">17.1%</td>
+          <td class="mono num pos">+8.8504%</td>
         </tr></tbody>
           </table>
         </div>
@@ -809,9 +827,9 @@
             <span class="width-badge">1.0% — fresh control</span>
             <span class="cohort-sub">Same width as the live pairs, new clock started today — isolates width effects from time-period effects.</span>
             <span class="cohort-agg mono">
-              7 pairs · 0 fills · 0 RT ·
-              0 forced ·
-              <span class="pos">0.0000%</span> combined
+              7 pairs · 442 fills · 200 RT ·
+              36 forced ·
+              <span class="pos">+146.9829%</span> combined
             </span>
             <span class="chevron" aria-hidden="true"></span>
           </div>
@@ -829,78 +847,78 @@
             <span class="mono sym">MINAUSDT-1.0-FRESH</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">72</td>
+          <td class="mono num">34</td>
+          <td class="mono num">3</td>
+          <td class="mono num">8.1%</td>
+          <td class="mono num pos">+26.8386%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">SFPUSDT-1.0-FRESH</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">62</td>
+          <td class="mono num">29</td>
+          <td class="mono num">3</td>
+          <td class="mono num">9.4%</td>
+          <td class="mono num pos">+22.1302%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">XYOUSDT-1.0-FRESH</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">86</td>
+          <td class="mono num">42</td>
+          <td class="mono num">1</td>
+          <td class="mono num">2.3%</td>
+          <td class="mono num pos">+40.6417%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">GOATUSDT-1.0-FRESH</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">74</td>
+          <td class="mono num">34</td>
+          <td class="mono num">5</td>
+          <td class="mono num">12.8%</td>
+          <td class="mono num pos">+21.3096%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">XPRUSDT-1.0-FRESH</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">26</td>
+          <td class="mono num">7</td>
+          <td class="mono num">11</td>
+          <td class="mono num">61.1%</td>
+          <td class="mono num pos">+7.9503%</td>
         </tr><tr class="row-flagged">
           <td class="col-symbol">
             <span class="mono sym">PIPPINUSDT-1.0-FRESH</span>
             <div class="risk-flag">⚠ Known risk: forced-close severity worsens at narrower spreads (backtest finding, see docs/SPREAD_WIDTH_COHORT_2026-08-22.md)</div>
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">64</td>
+          <td class="mono num">28</td>
+          <td class="mono num">7</td>
+          <td class="mono num">20.0%</td>
+          <td class="mono num pos">+14.7843%</td>
         </tr><tr class="">
           <td class="col-symbol">
             <span class="mono sym">SUSDT-1.0-FRESH</span>
             
           </td>
-          <td class="mono num">0.0d</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0</td>
-          <td class="mono num">0.0%</td>
-          <td class="mono num pos">0.0000%</td>
+          <td class="mono num">3.1d</td>
+          <td class="mono num">58</td>
+          <td class="mono num">26</td>
+          <td class="mono num">6</td>
+          <td class="mono num">18.8%</td>
+          <td class="mono num pos">+13.3283%</td>
         </tr></tbody>
           </table>
         </div>

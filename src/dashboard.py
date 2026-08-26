@@ -64,6 +64,22 @@ def build_live_rows(state: dict) -> str:
         badge = '<span class="chip chip-muted">suspended</span>' if susp else ""
         pnl_cls = "pos" if t["realized_pnl_pct_sum"] >= 0 else "neg"
         start_date = (ps.get("start_date_utc") or "—")[:10]
+
+        # Adjusted net (depth-based slippage + fill-probability) — additive,
+        # only present for the 8 live pairs once paper_trade.py has run at
+        # least once since this was wired in. See adjustment_model.py.
+        ta = ps.get("totals_adjusted")
+        am = ps.get("adjustment_model")
+        if ta is not None:
+            adj_cls = "pos" if ta["realized_pnl_pct_sum_adjusted"] >= 0 else "neg"
+            conf = am.get("confidence", "?") if am else "?"
+            adj_cell = (f'<td class="mono num {adj_cls}" title="depth confidence: {conf} — '
+                        f'fill-probability is a coarse proxy, not true queue position">'
+                        f'{_fmt_pct(ta["realized_pnl_pct_sum_adjusted"])} '
+                        f'<span class="chip chip-muted" style="font-size:0.7em">{conf.split(" ")[0]}</span></td>')
+        else:
+            adj_cell = '<td class="mono num">—</td>'
+
         rows.append(f"""<tr class="{row_cls}">
           <td class="col-symbol"><span class="mono sym">{pair}</span>{badge}</td>
           <td class="mono num">{start_date}</td>
@@ -73,6 +89,7 @@ def build_live_rows(state: dict) -> str:
           <td class="mono num">{t['forced_closes']}</td>
           <td class="mono num">{fc_rate:.1f}%</td>
           <td class="mono num {pnl_cls}">{_fmt_pct(t['realized_pnl_pct_sum'])}</td>
+          {adj_cell}
         </tr>""")
     return "".join(rows)
 
@@ -369,7 +386,7 @@ def render(state: dict) -> str:
     <div class="live-table-wrap">
       <table>
         <thead>
-          <tr><th>Pair</th><th>Started</th><th>Age</th><th>Fills</th><th>Complete</th><th>Forced</th><th>FC rate</th><th>Realized net</th></tr>
+          <tr><th>Pair</th><th>Started</th><th>Age</th><th>Fills</th><th>Complete</th><th>Forced</th><th>FC rate</th><th>Realized net (raw)</th><th title="Depth-based slippage on forced closes + pair-specific fill-probability haircut on complete RTs. See src/adjustment_model.py.">Adjusted net</th></tr>
         </thead>
         <tbody>{live_rows}</tbody>
       </table>

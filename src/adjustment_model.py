@@ -24,6 +24,25 @@ HONEST LIMITATION — read before trusting fill_prob as "real queue position":
   it accordingly. It also assumes a new order joins at the BACK of the
   visible queue (the conservative assumption, since we don't know better).
 
+CONFIRMED BLIND SPOT (2026-09-10) — same formula, caught on a WEEX pair:
+  This module's fill_prob is byte-for-byte the same formula as
+  crypto_mm_weex/src/adjustment_model.py's (this repo's WEEX equivalent),
+  which was caught actively getting a pair's fill probability BACKWARDS
+  relative to real trading data — see that file's "CONFIRMED BLIND SPOT"
+  note for the full writeup (real fill_prob numbers, real order outcomes,
+  root cause). Short version: it rated CAPINFRAUSDT (WEEX) more likely to
+  fill than XYOUSDT (this repo, MEXC) — 0.9025 vs. 0.8146 — while the real
+  accounts showed the opposite (CAPINFRAUSDT: 0 of ~30 real orders filled;
+  XYOUSDT: 4 of 6, 66.7%), because the resting-depth-vs-turnover ratio
+  can't tell a static/parked competing quote from an actively churning
+  one, and both pairs had nearly identical avg_bar_vol.
+  No pair tracked by THIS copy of the module has contradicted it that
+  clearly yet, but the blind spot is in the formula itself, not something
+  WEEX-specific — treat a "robust" confidence label here with the same
+  caution: it reflects snapshot count, not validated predictive accuracy.
+  Check a pair's actual real-order fill history before trusting fill_prob's
+  direction for any pause/continue/scale decision.
+
 Method for fill_prob(pair, side):
     p = avg_bar_volume_quote / (avg_bar_volume_quote + avg_resting_notional_at_level)
   i.e. a saturating ratio: if a bar's typical turnover vastly exceeds the
